@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useAccountStore } from "../stores/account";
+import PlaylistPanel from "./PlaylistPanel.vue";
+
+const account = useAccountStore();
+const showPlaylist = ref(false);
 
 const cards = ref([
   {
@@ -13,7 +18,7 @@ const cards = ref([
     id: 2,
     label: "Daily",
     title: "每日推荐",
-    sub: "登录后同步你的今日歌曲",
+    sub: account.current().loggedIn ? "登录后同步你的今日歌曲" : "请先登录",
     tone: "mix",
   },
   {
@@ -78,6 +83,7 @@ const tiles = ref([
           :key="card.id"
           class="home-card"
           :data-home-tone="card.tone"
+          @click="card.id === 1 ? showPlaylist = true : null"
         >
           <div class="home-card-label">{{ card.label }}</div>
           <div class="home-card-title">{{ card.title }}</div>
@@ -105,8 +111,9 @@ const tiles = ref([
         </div>
       </div>
     </div>
-  </section>
-</template>
+    </section>
+    <PlaylistPanel v-if="showPlaylist" @close="showPlaylist = false" />
+  </template>
 
 <style scoped>
 #empty-home {
