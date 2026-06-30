@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+    font-family: "Noto Sans SC", "PingFang SC", "HarmonyOS Sans SC", "Inter",
+      system-ui, sans-serif;
+    background: #000;
+    color: #fff;
+  }
+
+  ::selection {
+    background: rgba(0, 245, 212, 0.3);
+    color: #fff;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  :root {
+    --fc-bg: #08090b;
+    --fc-paper: #0e1014;
+    --fc-ink: #e8ecef;
+    --fc-ink-2: #d2d7dc;
+    --fc-muted: #8a9099;
+    --fc-hair: #1a1d22;
+    --fc-hair-2: #262a31;
+    --fc-accent: #00f5d4;
+    --fc-accent-hov: #00e0be;
+    --fc-accent-rgb: 0, 245, 212;
+    --fc-blue: #2442ff;
+    --fc-warm: #f8f4ee;
+    --chill-ink: #030608;
+    --chill-deep: #061116;
+    --chill-cyan: #8fe9ff;
+    --chill-blue: #73a7ff;
+    --chill-mint: #9cffdf;
+    --chill-soft: rgba(214, 248, 255, 0.9);
+    --champagne: #f4d28a;
+    --champagne-deep: #9a6f2c;
+    --home-accent: #00f5d4;
+    --home-accent-rgb: 0, 245, 212;
+    --visual-tint: #9db8cf;
+    --source-netease: #d95b67;
+    --source-qq: #00f5d4;
+    --source-local: #9db8cf;
+
+    --glass-bg: linear-gradient(
+      112deg,
+      rgba(72, 74, 76, 0.62),
+      rgba(24, 27, 30, 0.7) 48%,
+      rgba(8, 12, 14, 0.74)
+    );
+    --glass-bg-focus: linear-gradient(
+      112deg,
+      rgba(88, 91, 92, 0.68),
+      rgba(28, 32, 35, 0.76) 50%,
+      rgba(8, 13, 15, 0.82)
+    );
+    --glass-border: rgba(0, 245, 212, 0.3);
+    --glass-border-soft: rgba(255, 255, 255, 0.095);
+    --glass-shadow: 0 22px 64px rgba(0, 0, 0, 0.3),
+      0 0 34px rgba(0, 245, 212, 0.052),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      inset 0 -24px 58px rgba(0, 0, 0, 0.16);
+    --glass-shadow-focus: 0 24px 72px rgba(0, 0, 0, 0.34),
+      0 0 0 1px rgba(0, 245, 212, 0.13),
+      0 0 42px rgba(0, 245, 212, 0.075),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+}
+
+@layer components {
+  .glass-panel {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border-soft);
+    backdrop-filter: blur(20px) saturate(1.8);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    box-shadow: var(--glass-shadow);
+  }
+
+  .glass-panel:focus-within {
+    background: var(--glass-bg-focus);
+    box-shadow: var(--glass-shadow-focus);
+  }
+
+  .btn-glass {
+    background: rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(12px) saturate(1.8) brightness(1.16);
+    -webkit-backdrop-filter: blur(12px) saturate(1.8) brightness(1.16);
+    box-shadow: inset 0 0 2px 1px rgba(255, 255, 255, 0.34),
+      inset 0 0 10px 4px rgba(255, 255, 255, 0.13),
+      0 10px 30px rgba(0, 0, 0, 0.18);
+    transition: all 0.18s ease;
+  }
+
+  .btn-glass:hover {
+    background: rgba(255, 255, 255, 0.055);
+    box-shadow: inset 0 0 2px 1px rgba(255, 255, 255, 0.42),
+      inset 0 0 12px 5px rgba(255, 255, 255, 0.17),
+      0 12px 34px rgba(0, 0, 0, 0.22),
+      0 0 18px rgba(255, 255, 255, 0.06);
+  }
+
+  .accent-glow {
+    box-shadow: 0 0 20px rgba(0, 245, 212, 0.3),
+      0 0 60px rgba(0, 245, 212, 0.1);
+  }
+
+  /* Card float animation */
+  @keyframes home-card-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-2px);
+    }
+  }
+
+  @keyframes home-visual-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate3d(0, -5px, 0) rotate(0.6deg);
+    }
+  }
+
+  @keyframes home-shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
