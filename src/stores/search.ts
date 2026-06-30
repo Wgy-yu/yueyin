@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { Track, SourceType } from "../types/track";
 import { searchSongs } from "../services/music";
+import { useSettingsStore } from "./settings";
 
 export const useSearchStore = defineStore("search", () => {
   const query = ref("");
@@ -36,6 +37,19 @@ export const useSearchStore = defineStore("search", () => {
 
   function addToHistory(q: string) {
     history.value = [q, ...history.value.filter((h) => h !== q)].slice(0, 10);
+    // ponytail: persist via existing settings KV store, no new table
+    try {
+      useSettingsStore().set("searchHistory", JSON.stringify(history.value));
+    } catch {}
+  }
+
+  async function loadHistory() {
+    try {
+      const settings = useSettingsStore();
+      if (!settings.loaded) await settings.load();
+      const raw = settings.get("searchHistory");
+      if (raw) history.value = JSON.parse(raw);
+    } catch {}
   }
 
   function clearResults() {
@@ -46,6 +60,6 @@ export const useSearchStore = defineStore("search", () => {
 
   return {
     query, results, loading, error, source, history,
-    search, debouncedSearch, clearResults,
+    search, debouncedSearch, clearResults, loadHistory,
   };
 });

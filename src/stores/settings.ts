@@ -6,6 +6,7 @@ export interface Settings {
   volume: string;
   quality: string;
   playMode: string;
+  [key: string]: string; // ponytail: flexible KV for search history, lyrics cache, etc.
 }
 
 const DEFAULTS: Settings = {
