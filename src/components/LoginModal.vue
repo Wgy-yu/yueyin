@@ -50,9 +50,8 @@ function startPolling() {
         qrStatus.value = "scanned";
         qrStatusText.value = "已扫码，请在手机上确认";
       }
-      // 801 = waiting, keep polling
     } catch {
-      // keep polling on transient errors
+      // keep polling
     }
   }, 2000);
 }
@@ -83,192 +82,107 @@ onUnmounted(stopPolling);
 </script>
 
 <template>
-  <div class="login-overlay" @click.self="emit('close')">
-    <div class="login-modal">
-      <div class="login-header">
-        <div class="login-title">登录账号</div>
-        <button class="login-close" @click="emit('close')" aria-label="关闭">×</button>
+  <div class="login-mask fixed inset-0 z-50 flex items-center justify-center" @click.self="emit('close')">
+    <div class="login-modal w-[min(470px,92vw)] rounded-[18px] p-8 text-center font-sans">
+      <!-- Header -->
+      <div class="mb-4">
+        <div class="text-[17px] font-bold text-yueyin-ink">登录账号</div>
       </div>
 
-      <div class="login-tabs">
-        <button :class="{ active: tab === 'netease' }" @click="tab = 'netease'; qrStatus = 'idle'; stopPolling()">网易云</button>
-        <button :class="{ active: tab === 'qq' }" @click="tab = 'qq'; qrStatus = 'idle'; stopPolling()">QQ 音乐</button>
+      <!-- Platform tabs -->
+      <div class="mx-auto mb-4 flex gap-2 rounded-full border border-white/[0.075] bg-white/[0.035] p-1">
+        <button
+          class="h-8 flex-1 rounded-full text-[11.5px] font-bold tracking-wider transition-all"
+          :class="tab === 'netease' ? 'bg-[rgba(217,91,103,.16)] text-[#ffd7dc]' : 'text-white/50 hover:text-white/80'"
+          @click="tab = 'netease'; qrStatus = 'idle'; stopPolling()"
+        >网易云</button>
+        <button
+          class="h-8 flex-1 rounded-full text-[11.5px] font-bold tracking-wider transition-all"
+          :class="tab === 'qq' ? 'bg-[rgba(191,214,107,.16)] text-[#f3ffd1]' : 'text-white/50 hover:text-white/80'"
+          @click="tab = 'qq'; qrStatus = 'idle'; stopPolling()"
+        >QQ 音乐</button>
       </div>
 
-      <!-- Netease: QR code login -->
-      <div v-if="tab === 'netease'" class="login-section">
-        <div class="login-intro">
-          <div class="login-intro-title">扫码登录网易云音乐</div>
-          <div class="login-intro-body">使用网易云音乐 APP 扫码，可同步歌单、红心与播客。</div>
-        </div>
+      <!-- Intro card -->
+      <div class="login-intro -mx-1.5 mb-4 rounded-[14px] border border-white/[0.075] px-[15px] py-[14px] text-left">
+        <div class="mb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(244,210,138,.72)]">Melovibe</div>
+        <div class="mb-1.5 text-[18px] font-bold leading-[1.18] text-[rgba(255,255,255,.95)]">音乐播放器，也是一座视觉舞台</div>
+        <div class="text-[12px] leading-[1.58] text-[rgba(255,255,255,.56)]">搜索或导入一首歌即可播放；登录后会同步歌单、红心和播客，让封面、歌词和粒子跟着音乐动起来。</div>
+      </div>
 
-        <div class="qr-area">
-          <div v-if="qrStatus === 'idle'" class="qr-placeholder">
-            <button class="qr-start-btn" @click="startQr">生成二维码</button>
-          </div>
-          <div v-else-if="qrStatus === 'loading'" class="qr-placeholder">
-            <div class="qr-spinner"></div>
-          </div>
-          <div v-else class="qr-image-wrap">
-            <img :src="qrImg" alt="登录二维码" class="qr-image" />
-            <div v-if="qrStatus === 'expired'" class="qr-overlay" @click="startQr">
-              <span>点击刷新</span>
+      <!-- Netease QR -->
+      <div v-if="tab === 'netease'" class="mb-4">
+        <div class="qr-area flex flex-col items-center gap-3 py-3">
+          <!-- QR container: 200x200, rounded 16px -->
+          <div class="qr-shell relative flex h-[200px] w-[200px] items-center justify-center rounded-2xl border border-[rgba(217,91,103,.28)] bg-[radial-gradient(circle_at_50%_42%,rgba(217,91,103,.22),transparent_46%),rgba(255,255,255,.035)]">
+            <div v-if="qrStatus === 'idle'">
+              <button class="rounded-xl border border-[rgba(217,91,103,.3)] bg-[rgba(217,91,103,.1)] px-5 py-2.5 text-[13px] font-semibold text-[#ffd7dc] transition-colors hover:bg-[rgba(217,91,103,.18)]" @click="startQr">生成二维码</button>
             </div>
+            <div v-else-if="qrStatus === 'loading'" class="qr-spinner h-7 w-7 rounded-full border-2 border-white/10 border-t-[rgba(217,91,103,.7)]"></div>
+            <template v-else>
+              <img :src="qrImg" alt="登录二维码" class="h-full w-full rounded-xl bg-white p-2" />
+              <div v-if="qrStatus === 'expired'" class="absolute inset-0 flex cursor-pointer items-center justify-center rounded-2xl bg-black/70 text-sm font-semibold text-white" @click="startQr">点击刷新</div>
+            </template>
           </div>
-          <div class="qr-status" :class="qrStatus">{{ qrStatusText }}</div>
+          <!-- Status text: min-h 18px, mb 14px -->
+          <div
+            class="min-h-[18px] text-center text-[12px]"
+            :class="{
+              'text-white/55': qrStatus === 'idle' || qrStatus === 'loading' || qrStatus === 'waiting',
+              'text-[rgba(0,245,212,.9)]': qrStatus === 'success' || qrStatus === 'scanned',
+              'text-[rgba(255,100,120,.9)]': qrStatus === 'error',
+              'text-[rgba(255,200,100,.8)]': qrStatus === 'expired',
+            }"
+          >{{ qrStatusText }}</div>
         </div>
       </div>
 
-      <!-- QQ: Cookie login -->
-      <div v-else class="login-section">
-        <div class="login-intro">
-          <div class="login-intro-title">登录 QQ 音乐</div>
-          <div class="login-intro-body">QQ 音乐暂使用 Cookie 登录，后续版本将支持网页扫码。</div>
-        </div>
+      <!-- QQ Cookie login -->
+      <div v-else class="mb-4 text-left">
+        <div class="mb-3 text-[12px] text-white/50">QQ 音乐暂使用 Cookie 登录，后续版本将支持网页扫码。</div>
+        <textarea
+          v-model="cookieInput"
+          class="mb-2 w-full resize-y rounded-[10px] border border-white/10 bg-white/[0.04] p-3 font-mono text-[12px] text-white/90 outline-none transition-colors focus:border-[rgba(0,245,212,.4)]"
+          placeholder="uin=xxx; qm_keyst=xxx"
+          rows="3"
+        ></textarea>
+        <div v-if="loginError" class="mb-2 text-[12px] text-[rgba(255,100,120,.9)]">{{ loginError }}</div>
+        <button
+          class="h-9 w-full rounded-[10px] border border-[rgba(244,210,138,.25)] bg-[rgba(244,210,138,.08)] text-[12.5px] font-semibold text-[rgba(244,210,138,.9)] transition-colors hover:bg-[rgba(244,210,138,.14)] disabled:opacity-50"
+          :disabled="loginLoading"
+          @click="submitCookie"
+        >{{ loginLoading ? "登录中..." : "保存 Cookie" }}</button>
+      </div>
 
-        <div class="login-cookie">
-          <div class="cookie-hint">粘贴 QQ 音乐 Cookie（需包含 uin）</div>
-          <textarea
-            v-model="cookieInput"
-            class="cookie-input"
-            placeholder="uin=xxx; qm_keyst=xxx"
-            rows="3"
-          ></textarea>
-          <div v-if="loginError" class="login-error">{{ loginError }}</div>
-          <button class="cookie-submit" :disabled="loginLoading" @click="submitCookie">
-            {{ loginLoading ? "登录中..." : "保存 Cookie" }}
-          </button>
-        </div>
+      <!-- Bottom actions -->
+      <div class="flex flex-wrap justify-center gap-2.5">
+        <button class="rounded-lg border border-white/10 bg-white/[0.04] px-5 py-2 text-[12.5px] text-white/60 transition-colors hover:bg-white/[0.08]" @click="emit('close')">取消</button>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.login-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.login-mask {
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(12px);
 }
 
 .login-modal {
-  width: min(420px, 90vw);
-  background: linear-gradient(160deg, rgba(28, 32, 40, 0.96), rgba(12, 14, 18, 0.98));
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-  color: rgba(255, 255, 255, 0.88);
-  font-family: inherit;
+  background: linear-gradient(180deg, rgba(24, 23, 26, 0.96), rgba(12, 11, 12, 0.92));
+  border: 1px solid rgba(244, 210, 138, 0.16);
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-
-.login-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.login-title { font-size: 17px; font-weight: 720; }
-
-.login-close {
-  background: none; border: none;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 22px; cursor: pointer;
-  padding: 4px 8px; border-radius: 8px;
-  transition: background 0.15s;
-}
-.login-close:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
-
-.login-tabs {
-  display: flex; gap: 4px; margin-bottom: 14px;
-}
-.login-tabs button {
-  flex: 1; height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px; background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.6);
-  font-family: inherit; font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s;
-}
-.login-tabs button.active {
-  background: rgba(0, 245, 212, 0.12);
-  border-color: rgba(0, 245, 212, 0.35);
-  color: rgba(0, 245, 212, 0.95);
-}
-.login-tabs button:hover { background: rgba(255, 255, 255, 0.08); }
 
 .login-intro {
-  padding: 12px 14px; border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
-  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(255, 83, 103, 0.09), rgba(244, 210, 138, 0.055), rgba(255, 255, 255, 0.025));
 }
-.login-intro-title { font-size: 15px; font-weight: 680; color: rgba(255, 255, 255, 0.9); margin-bottom: 4px; }
-.login-intro-body { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 
-.qr-area {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 12px; padding: 12px 0;
-}
-.qr-placeholder {
-  width: 180px; height: 180px;
-  display: flex; align-items: center; justify-content: center;
-  border: 1px dashed rgba(255, 255, 255, 0.12); border-radius: 14px;
-}
-.qr-start-btn {
-  padding: 10px 20px; border-radius: 10px;
-  border: 1px solid rgba(0, 245, 212, 0.3);
-  background: rgba(0, 245, 212, 0.1);
-  color: rgba(0, 245, 212, 0.9);
-  font-family: inherit; font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s;
-}
-.qr-start-btn:hover { background: rgba(0, 245, 212, 0.18); }
 .qr-spinner {
-  width: 28px; height: 28px;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-top-color: rgba(0, 245, 212, 0.7);
-  border-radius: 50%; animation: spin 0.8s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
-.qr-image-wrap { position: relative; width: 180px; height: 180px; }
-.qr-image { width: 100%; height: 100%; border-radius: 10px; background: #fff; padding: 8px; }
-.qr-overlay {
-  position: absolute; inset: 0;
-  background: rgba(0, 0, 0, 0.7); border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: #fff; font-size: 14px; font-weight: 600;
-}
-.qr-status { font-size: 12px; color: rgba(255, 255, 255, 0.55); text-align: center; }
-.qr-status.success { color: rgba(0, 245, 212, 0.9); }
-.qr-status.error { color: rgba(255, 100, 120, 0.9); }
-.qr-status.expired { color: rgba(255, 200, 100, 0.8); }
 
-.login-cookie { display: flex; flex-direction: column; gap: 8px; }
-.cookie-hint { font-size: 12px; color: rgba(255, 255, 255, 0.5); margin-bottom: 4px; }
-.cookie-input {
-  width: 100%; background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px;
-  padding: 10px 12px; color: rgba(255, 255, 255, 0.88);
-  font-family: monospace; font-size: 12px; resize: vertical;
-  outline: none; transition: border-color 0.15s;
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
-.cookie-input:focus { border-color: rgba(0, 245, 212, 0.4); }
-.login-error { font-size: 12px; color: rgba(255, 100, 120, 0.9); }
-.cookie-submit {
-  margin-top: 8px; width: 100%; height: 36px;
-  border-radius: 10px; border: 1px solid rgba(0, 245, 212, 0.3);
-  background: rgba(0, 245, 212, 0.12);
-  color: rgba(0, 245, 212, 0.95);
-  font-family: inherit; font-size: 13px; font-weight: 680;
-  cursor: pointer; transition: all 0.15s;
-}
-.cookie-submit:hover:not(:disabled) { background: rgba(0, 245, 212, 0.2); }
-.cookie-submit:disabled { opacity: 0.5; cursor: default; }
 </style>

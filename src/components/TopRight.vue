@@ -18,116 +18,36 @@ onMounted(() => {
 </script>
 
 <template>
-  <div id="top-right">
+  <div class="fixed right-6 top-6 z-10 flex items-center gap-2.5">
+    <!-- Home button -->
     <button
-      id="home-btn"
-      class="icon-btn"
+      class="flex h-11 w-11 items-center justify-center rounded-full border border-[rgba(0,245,212,.18)] bg-white/[0.04] text-[rgba(232,236,239,.78)] backdrop-blur-xl transition-all hover:border-[rgba(0,245,212,.44)] hover:bg-[rgba(0,245,212,.075)] hover:text-white hover:shadow-[0_14px_38px_rgba(0,245,212,.08)]"
       @click="goHome"
       title="回到首页"
       aria-label="回到首页"
     >
-      <svg
-        width="19"
-        height="19"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.9"
-        viewBox="0 0 24 24"
-      >
+      <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24">
         <path d="M3 10.8 12 3l9 7.8" />
         <path d="M5 10v10h14V10" />
         <path d="M9.5 20v-5h5v5" />
       </svg>
     </button>
+
+    <!-- User button -->
     <button
-      id="user-btn"
-      class="icon-btn"
+      class="flex h-11 items-center justify-center gap-2 rounded-[22px] border border-white/[0.08] bg-white/[0.035] px-4 text-[12px] tracking-wide text-white/55 backdrop-blur-xl transition-all hover:bg-white/[0.09] hover:text-white"
       @click="showLogin = true"
       :title="account.current().loggedIn ? account.current().nickname : '登录账号'"
     >
       <img
         v-if="account.current().loggedIn && account.current().avatar"
         :src="account.current().avatar"
-        class="user-avatar"
+        class="h-7 w-7 rounded-full object-cover"
         alt=""
       />
-      <span v-else class="login-word">登录</span>
+      <span v-else class="font-semibold">登录</span>
     </button>
+
     <LoginModal v-if="showLogin" @close="showLogin = false" />
   </div>
 </template>
-
-<style scoped>
-#top-right {
-  position: fixed;
-  z-index: 10;
-  top: 24px;
-  right: 24px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.icon-btn {
-  width: 44px;
-  height: 44px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.035);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  color: rgba(255, 255, 255, 0.55);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s;
-  font-family: inherit;
-  padding: 0;
-  overflow: hidden;
-}
-
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.18);
-  color: #fff;
-  transform: scale(1.04);
-}
-
-#home-btn {
-  width: 44px;
-  min-width: 44px;
-  border-color: rgba(0, 245, 212, 0.18);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(232, 236, 239, 0.78);
-}
-
-#home-btn:hover {
-  border-color: rgba(0, 245, 212, 0.44);
-  background: rgba(0, 245, 212, 0.075);
-  color: #fff;
-  box-shadow: 0 14px 38px rgba(0, 245, 212, 0.08);
-}
-
-#user-btn {
-  padding: 0 16px;
-  width: auto;
-  min-width: 58px;
-  height: 44px;
-  border-radius: 24px;
-  gap: 8px;
-  font-size: 12px;
-  letter-spacing: 0.4px;
-}
-
-.login-word {
-  font-weight: 600;
-}
-
-.user-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-</style>
