@@ -42,10 +42,18 @@ export function usePlayback() {
     player.duration = 0;
     lyrics.load(track); // fire-and-forget
 
+    const eng = getEngine();
+
+    // Local file: use blob URL directly
+    if (track.source === "local" && track.extra?.blobUrl) {
+      await eng.load(track.extra.blobUrl as string);
+      if (playing.value) await eng.play();
+      return;
+    }
+
     const url = await getSongUrl(track.id, track.source);
     if (!url) { console.warn("无法获取播放地址:", track.name); return; }
 
-    const eng = getEngine();
     await eng.load(proxiedAudioUrl(url));
     if (playing.value) await eng.play();
   });

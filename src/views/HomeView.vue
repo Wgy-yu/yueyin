@@ -10,12 +10,14 @@ import BottomBar from "../components/BottomBar.vue";
 import LyricsPanel from "../components/LyricsPanel.vue";
 import { getAudioEngine } from "../composables/usePlayback";
 import { useVisuals } from "../composables/useVisuals";
+import { useDropFiles } from "../composables/useDropFiles";
 
 const showSplash = ref(true);
 const appVersion = ref("0.1.0");
 const isMaximized = ref(false);
 const isFullscreen = ref(false);
 const canvasContainerRef = ref<HTMLElement | null>(null);
+const appWindowRef = ref<HTMLElement | null>(null);
 
 function handleSplashEnter() {
   showSplash.value = false;
@@ -37,6 +39,9 @@ function handleSplashEnter() {
     }
   }
 }
+
+// Enable drag-and-drop local file playback
+if (appWindowRef.value) useDropFiles(appWindowRef.value);
 
 onMounted(async () => {
   try {
@@ -67,6 +72,7 @@ onMounted(async () => {
 <template>
   <div
     id="app-window"
+    ref="appWindowRef"
     class="h-screen w-screen overflow-hidden bg-[#010304] relative"
     :class="{
       maximized: isMaximized,
