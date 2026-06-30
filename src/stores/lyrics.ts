@@ -5,6 +5,10 @@ import { parseLrc, parsePlainText } from "../utils/lrc";
 import { fetchLyrics } from "../services/music";
 import type { Track } from "../types/track";
 
+// ponytail: in-memory LRU cache, no new SQLite table
+const cache = new Map<string, string>();
+const CACHE_MAX = 200;
+
 export const useLyricsStore = defineStore("lyrics", () => {
   const lines = ref<LyricLine[]>([]);
   const currentIndex = ref(-1);
@@ -16,12 +20,24 @@ export const useLyricsStore = defineStore("lyrics", () => {
   );
 
   async function load(track: Track) {
+    const cacheKey = `${track.source}:${track.id}`;
     loading.value = true;
     lines.value = [];
     currentIndex.value = -1;
     source.value = null;
     try {
-      const raw = await fetchLyrics(track.id, track.source);
+      let raw = cache.get(cacheKey);
+      if (!raw) {
+        raw = await fetchLyrics(track.id, track.source) ?? undefined;
+        if (raw) {
+          cache.set(cacheKey, raw);
+          if (cache.size > CACHE_MAX) {
+            // Delete oldest entry
+            const first = cache.keys().next().value;
+            if (first) cache.delete(first);
+          }
+        }
+      }
       if (raw) {
         const parsed = parseLrc(raw);
         if (parsed.length > 1) {
@@ -29,13 +45,12 @@ export const useLyricsStore = defineStore("lyrics", () => {
           source.value = "lrc";
         }
       }
-      // ponytail: plain text fallback if LRC parsing yields nothing useful
       if (!lines.value.length && track.name) {
         lines.value = parsePlainText(track.name, track.duration ?? 240);
         source.value = "plain";
       }
     } catch {
-      // Silent fail — lyrics are optional
+      // Silent fail
     } finally {
       loading.value = false;
     }
@@ -43,7 +58,6 @@ export const useLyricsStore = defineStore("lyrics", () => {
 
   function updateProgress(currentTime: number) {
     if (!lines.value.length) return;
-    // Binary scan for current line (matching Mineradio's approach)
     let lo = 0;
     let hi = lines.value.length - 1;
     let result = -1;
