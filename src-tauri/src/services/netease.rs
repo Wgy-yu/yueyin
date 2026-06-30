@@ -94,11 +94,36 @@ struct QualityCandidate {
 }
 
 const QUALITIES: &[QualityCandidate] = &[
-    QualityCandidate { level: "jymaster", br: 1999000, label: "超清母带", svip: true },
-    QualityCandidate { level: "hires",    br: 1999000, label: "高清臻音", svip: false },
-    QualityCandidate { level: "lossless", br: 1411000, label: "无损",     svip: false },
-    QualityCandidate { level: "exhigh",   br: 999000,  label: "极高",     svip: false },
-    QualityCandidate { level: "standard", br: 128000,  label: "标准",     svip: false },
+    QualityCandidate {
+        level: "jymaster",
+        br: 1999000,
+        label: "超清母带",
+        svip: true,
+    },
+    QualityCandidate {
+        level: "hires",
+        br: 1999000,
+        label: "高清臻音",
+        svip: false,
+    },
+    QualityCandidate {
+        level: "lossless",
+        br: 1411000,
+        label: "无损",
+        svip: false,
+    },
+    QualityCandidate {
+        level: "exhigh",
+        br: 999000,
+        label: "极高",
+        svip: false,
+    },
+    QualityCandidate {
+        level: "standard",
+        br: 128000,
+        label: "标准",
+        svip: false,
+    },
 ];
 
 fn quality_from(pref: &str) -> usize {
@@ -148,7 +173,11 @@ fn map_song(s: &Value) -> NeteaseSong {
         song_type: "song".into(),
         id: s["id"].as_u64().unwrap_or(0),
         name: s["name"].as_str().unwrap_or("").to_string(),
-        artist: artists.iter().map(|a| a.name.as_str()).collect::<Vec<_>>().join(" / "),
+        artist: artists
+            .iter()
+            .map(|a| a.name.as_str())
+            .collect::<Vec<_>>()
+            .join(" / "),
         artists,
         artist_id: s["ar"]
             .as_array()
@@ -219,20 +248,32 @@ pub async fn search(keywords: &str, limit: u32, cookie: &str) -> Result<Vec<Nete
     let mut mapped: Vec<NeteaseSong> = songs_val.iter().map(map_song).collect();
 
     // Backfill missing covers via song_detail
-    let missing: Vec<u64> = mapped.iter().filter(|s| s.cover.is_empty()).map(|s| s.id).collect();
+    let missing: Vec<u64> = mapped
+        .iter()
+        .filter(|s| s.cover.is_empty())
+        .map(|s| s.id)
+        .collect();
     if !missing.is_empty() {
         if let Ok(detail_resp) = weapi_post(
             "v3/song/detail",
             &json!({ "c": missing.iter().map(|id| json!({"id": id})).collect::<Vec<_>>() }),
             cookie,
-        ).await {
+        )
+        .await
+        {
             if let Some(songs) = detail_resp["songs"].as_array() {
                 let id_to_pic: std::collections::HashMap<u64, String> = songs
                     .iter()
                     .filter_map(|s| {
                         let id = s["id"].as_u64()?;
-                        let pic = s["al"]["picUrl"].as_str().or(s["album"]["picUrl"].as_str())?;
-                        if pic.is_empty() { None } else { Some((id, pic.to_string())) }
+                        let pic = s["al"]["picUrl"]
+                            .as_str()
+                            .or(s["album"]["picUrl"].as_str())?;
+                        if pic.is_empty() {
+                            None
+                        } else {
+                            Some((id, pic.to_string()))
+                        }
                     })
                     .collect();
                 for song in &mut mapped {
@@ -264,7 +305,8 @@ pub async fn song_url(
             continue;
         }
         // Try v1 endpoint first
-        let result = try_song_url_v1(id, q.level, cookie).await
+        let result = try_song_url_v1(id, q.level, cookie)
+            .await
             .or(try_song_url(id, q.br, cookie).await);
         match result {
             Ok(d) => {
@@ -338,10 +380,7 @@ async fn try_song_url_v1(id: u64, level: &str, cookie: &str) -> Result<Value, St
         "header": {"os": "pc", "appver": "2.9.7"},
     });
     let resp = weapi_post("song/enhance/player/url/v1", &body, cookie).await?;
-    let d = resp
-        .pointer("/data/0")
-        .cloned()
-        .unwrap_or(Value::Null);
+    let d = resp.pointer("/data/0").cloned().unwrap_or(Value::Null);
     if d.is_null() || d["url"].as_str().is_none() {
         return Err("no url".into());
     }
@@ -354,10 +393,7 @@ async fn try_song_url(id: u64, br: u64, cookie: &str) -> Result<Value, String> {
         "br": br,
     });
     let resp = weapi_post("song/enhance/player/url", &body, cookie).await?;
-    let d = resp
-        .pointer("/data/0")
-        .cloned()
-        .unwrap_or(Value::Null);
+    let d = resp.pointer("/data/0").cloned().unwrap_or(Value::Null);
     if d.is_null() || d["url"].as_str().is_none() {
         return Err("no url".into());
     }
@@ -460,10 +496,13 @@ pub async fn login_status(cookie: &str) -> LoginInfo {
             let account = &resp["account"];
             let user_id = profile["userId"]
                 .as_str()
-                .or_else(|| profile["userId"].as_u64().map(|_| ""))
                 .map(|s| s.to_string())
+                .or_else(|| profile["userId"].as_u64().map(|id| id.to_string()))
                 .or_else(|| account["id"].as_u64().map(|id| id.to_string()));
-            let nickname = profile["nickname"].as_str().unwrap_or("网易云用户").to_string();
+            let nickname = profile["nickname"]
+                .as_str()
+                .unwrap_or("网易云用户")
+                .to_string();
             let avatar = profile["avatarUrl"].as_str().unwrap_or("").to_string();
             let vip_type = account["vipType"].as_i64().unwrap_or(0);
             let is_svip = vip_type >= 10;
@@ -474,10 +513,22 @@ pub async fn login_status(cookie: &str) -> LoginInfo {
                 nickname,
                 avatar,
                 vip_type,
-                vip_level: if is_svip { "svip".into() } else if is_vip { "vip".into() } else { "none".into() },
+                vip_level: if is_svip {
+                    "svip".into()
+                } else if is_vip {
+                    "vip".into()
+                } else {
+                    "none".into()
+                },
                 is_vip,
                 is_svip,
-                vip_label: if is_svip { "SVIP".into() } else if is_vip { "VIP".into() } else { "无VIP".into() },
+                vip_label: if is_svip {
+                    "SVIP".into()
+                } else if is_vip {
+                    "VIP".into()
+                } else {
+                    "无VIP".into()
+                },
                 has_cookie: Some(true),
             }
         }
@@ -531,7 +582,10 @@ pub struct QrCheckResult {
 }
 
 /// Poll QR login status, preserving Set-Cookie headers.
-pub async fn qr_check_with_cookies(key: &str, existing_cookie: &str) -> Result<QrCheckResult, String> {
+pub async fn qr_check_with_cookies(
+    key: &str,
+    existing_cookie: &str,
+) -> Result<QrCheckResult, String> {
     let csrf = extract_csrf(existing_cookie);
     let mut payload = json!({ "key": key, "type": 1 });
     if let Some(obj) = payload.as_object_mut() {
@@ -574,19 +628,26 @@ pub async fn qr_check_with_cookies(key: &str, existing_cookie: &str) -> Result<Q
         seen.insert(name.to_string())
     });
 
-    let body = resp.json::<Value>().await
+    let body = resp
+        .json::<Value>()
+        .await
         .map_err(|e| format!("解析二维码响应失败: {}", e))?;
 
     // Merge with existing cookie
     let mut merged = existing_cookie.to_string();
     for part in &cookie_parts {
         if !merged.contains(&format!("{}=", part.split('=').next().unwrap_or(""))) {
-            if !merged.is_empty() { merged.push_str("; "); }
+            if !merged.is_empty() {
+                merged.push_str("; ");
+            }
             merged.push_str(part);
         }
     }
 
-    Ok(QrCheckResult { body, cookie: merged })
+    Ok(QrCheckResult {
+        body,
+        cookie: merged,
+    })
 }
 
 /// Fetch user's playlists.

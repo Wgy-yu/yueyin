@@ -48,8 +48,7 @@ pub async fn music_song_url(
         }
         _ => {
             let song_id: u64 = id.parse().map_err(|_| "Invalid song id")?;
-            let info =
-                netease::song_url(song_id, q, &cookies.netease_cookie(), false).await?;
+            let info = netease::song_url(song_id, q, &cookies.netease_cookie(), false).await?;
             Ok(serde_json::to_value(info).unwrap())
         }
     }
@@ -84,16 +83,30 @@ pub async fn music_open_web_login(
     cookies: State<'_, CookieStore>,
 ) -> Result<Value, String> {
     let is_qq = provider == "qq";
-    let label = if is_qq { "music-login-qq" } else { "music-login-netease" };
+    let label = if is_qq {
+        "music-login-qq"
+    } else {
+        "music-login-netease"
+    };
     if let Some(existing) = app.get_webview_window(label) {
         existing.set_focus().map_err(|e| e.to_string())?;
         return Err("登录窗口已打开，请在官方页面完成登录".into());
     }
 
     let (url, title, width, height) = if is_qq {
-        ("https://y.qq.com/n/ryqq/profile", "QQ 音乐登录", 900.0, 720.0)
+        (
+            "https://y.qq.com/n/ryqq/profile",
+            "QQ 音乐登录",
+            900.0,
+            720.0,
+        )
     } else {
-        ("https://music.163.com/#/login", "网易云音乐登录", 940.0, 760.0)
+        (
+            "https://music.163.com/#/login",
+            "网易云音乐登录",
+            940.0,
+            760.0,
+        )
     };
     let window = WebviewWindowBuilder::new(
         &app,
@@ -107,7 +120,6 @@ pub async fn music_open_web_login(
     .build()
     .map_err(|e| format!("打开官方登录窗口失败: {e}"))?;
 
-    let mut qq_warmup_started = false;
     for _ in 0..250 {
         tokio::time::sleep(Duration::from_millis(1200)).await;
         if app.get_webview_window(label).is_none() {
@@ -115,17 +127,11 @@ pub async fn music_open_web_login(
         }
         let header = build_webview_cookie_header(&window, is_qq)?;
         if is_qq {
-            if qq_cookie_has_playback_login(&header) {
+            if qq_cookie_has_login(&header) {
                 cookies.set_qq_cookie(&header)?;
                 let info = qq_login_info(&header);
                 let _ = window.close();
                 return Ok(info);
-            }
-            if !qq_warmup_started && qq_cookie_has_login(&header) {
-                qq_warmup_started = true;
-                let player_url = "https://y.qq.com/n/ryqq/player"
-                    .parse().map_err(|e| format!("QQ 音乐地址无效: {e}"))?;
-                window.navigate(player_url).map_err(|e| e.to_string())?;
             }
         } else if cookie_value(&header, "MUSIC_U").is_some() {
             cookies.set_netease_cookie(&header)?;
@@ -159,18 +165,34 @@ fn build_webview_cookie_header(
         if is_qq {
             domain == "qq.com" || domain.ends_with(".qq.com")
         } else {
-            domain == "163.com" || domain.ends_with(".163.com")
-                || domain == "netease.com" || domain.ends_with(".netease.com")
+            domain == "163.com"
+                || domain.ends_with(".163.com")
+                || domain == "netease.com"
+                || domain.ends_with(".netease.com")
         }
     };
     let mut values = HashMap::new();
-    for cookie in window.cookies().map_err(|e| format!("读取登录会话失败: {e}"))? {
-        if cookie.domain().is_some_and(allowed) && !cookie.value().is_empty() {
+    for cookie in window
+        .cookies()
+        .map_err(|e| format!("读取登录会话失败: {e}"))?
+    {
+        if cookie.domain().is_none_or(allowed) && !cookie.value().is_empty() {
             values.insert(cookie.name().to_string(), cookie.value().to_string());
         }
     }
     let priority: &[&str] = if is_qq {
-        &["uin", "qqmusic_uin", "wxuin", "p_uin", "qm_keyst", "qqmusic_key", "music_key", "wxskey", "p_skey", "skey"]
+        &[
+            "uin",
+            "qqmusic_uin",
+            "wxuin",
+            "p_uin",
+            "qm_keyst",
+            "qqmusic_key",
+            "music_key",
+            "wxskey",
+            "p_skey",
+            "skey",
+        ]
     } else {
         &["MUSIC_U", "__csrf", "NMTID", "MUSIC_A"]
     };
@@ -182,7 +204,10 @@ fn build_webview_cookie_header(
     }
     let mut rest: Vec<_> = values.into_iter().collect();
     rest.sort_by(|a, b| a.0.cmp(&b.0));
-    pairs.extend(rest.into_iter().map(|(name, value)| format!("{name}={value}")));
+    pairs.extend(
+        rest.into_iter()
+            .map(|(name, value)| format!("{name}={value}")),
+    );
     Ok(pairs.join("; "))
 }
 
@@ -194,26 +219,37 @@ fn cookie_value(cookie: &str, name: &str) -> Option<String> {
 }
 
 fn qq_uin(cookie: &str) -> Option<String> {
-    ["uin", "qqmusic_uin", "wxuin", "p_uin"].iter()
+    ["uin", "qqmusic_uin", "wxuin", "p_uin"]
+        .iter()
         .find_map(|name| cookie_value(cookie, name))
-        .map(|value| value.chars().filter(char::is_ascii_digit).collect::<String>())
+        .map(|value| {
+            value
+                .chars()
+                .filter(char::is_ascii_digit)
+                .collect::<String>()
+        })
         .filter(|value| !value.is_empty())
 }
 
 fn qq_cookie_has_login(cookie: &str) -> bool {
-    qq_uin(cookie).is_some() && ["qm_keyst", "qqmusic_key", "music_key", "p_skey", "skey", "wxskey"]
-        .iter().any(|name| cookie_value(cookie, name).is_some())
-}
-
-fn qq_cookie_has_playback_login(cookie: &str) -> bool {
-    qq_uin(cookie).is_some() && ["qm_keyst", "qqmusic_key", "music_key", "wxskey"]
-        .iter().any(|name| cookie_value(cookie, name).is_some())
+    qq_uin(cookie).is_some()
+        && [
+            "qm_keyst",
+            "qqmusic_key",
+            "music_key",
+            "p_skey",
+            "skey",
+            "wxskey",
+        ]
+        .iter()
+        .any(|name| cookie_value(cookie, name).is_some())
 }
 
 fn qq_login_info(cookie: &str) -> Value {
     let user_id = qq_uin(cookie).unwrap_or_default();
     let nickname = ["nickname", "nick", "qq_nickname", "ptnick"]
-        .iter().find_map(|name| cookie_value(cookie, name))
+        .iter()
+        .find_map(|name| cookie_value(cookie, name))
         .unwrap_or_else(|| "QQ 音乐用户".into());
     serde_json::json!({
         "provider": "qq",
@@ -231,10 +267,12 @@ mod login_tests {
 
     #[test]
     fn recognizes_provider_login_cookies() {
-        assert_eq!(cookie_value("foo=1; MUSIC_U=token", "MUSIC_U").as_deref(), Some("token"));
+        assert_eq!(
+            cookie_value("foo=1; MUSIC_U=token", "MUSIC_U").as_deref(),
+            Some("token")
+        );
         assert!(qq_cookie_has_login("uin=o12345; p_skey=key"));
-        assert!(!qq_cookie_has_playback_login("uin=o12345; p_skey=key"));
-        assert!(qq_cookie_has_playback_login("uin=o12345; qm_keyst=key"));
+        assert!(qq_cookie_has_login("uin=o12345; qm_keyst=key"));
     }
 }
 
@@ -284,10 +322,7 @@ pub async fn music_qr_create(key: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn music_qr_check(
-    key: String,
-    cookies: State<'_, CookieStore>,
-) -> Result<Value, String> {
+pub async fn music_qr_check(key: String, cookies: State<'_, CookieStore>) -> Result<Value, String> {
     let result = netease::qr_check_with_cookies(&key, &cookies.netease_cookie()).await?;
     let code = result.body["code"].as_i64().unwrap_or(0);
 
@@ -368,7 +403,10 @@ pub async fn music_audio_proxy(url: String) -> Result<Vec<u8>, String> {
 
     let resp = client()
         .get(&url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
         .header("Referer", "https://music.163.com/")
         .send()
         .await
