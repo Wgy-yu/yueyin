@@ -141,7 +141,7 @@ export async function fetchLyrics(id: string, source: SourceType = "netease"): P
         id,
         source,
       });
-      return data.yrc ?? data.lyric ?? null;
+      return data.yrc || data.lyric || data.tlyric || null;
     } catch {
       return null;
     }
@@ -154,7 +154,7 @@ export async function fetchLyrics(id: string, source: SourceType = "netease"): P
       endpoint,
       { [param]: id }
     );
-    return data.yrc?.lyric ?? data.lrc?.lyric ?? data.lyric ?? null;
+    return data.yrc?.lyric || data.lrc?.lyric || data.lyric || null;
   } catch {
     return null;
   }

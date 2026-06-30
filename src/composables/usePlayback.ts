@@ -7,6 +7,7 @@ import { useQueueStore } from "../stores/queue";
 import { useLyricsStore } from "../stores/lyrics";
 
 let engine: AudioEngine | null = null;
+let loadToken = 0;
 
 export function getAudioEngine(): AudioEngine | null { return engine; }
 
@@ -19,7 +20,10 @@ export function usePlayback() {
   function getEngine() {
     if (!engine) {
       engine = new AudioEngine();
-      engine.on("timeupdate", () => { player.currentTime = engine!.currentTime; });
+      engine.on("timeupdate", () => {
+        player.currentTime = engine!.currentTime;
+        lyrics.updateProgress(player.currentTime);
+      });
       engine.on("loadedmetadata", () => { player.duration = engine!.duration; });
       engine.on("ended", () => {
         if (player.playMode === "single") {
@@ -35,6 +39,7 @@ export function usePlayback() {
 
   // React to queue index changes → load and play
   watch(() => queue.currentIndex, async () => {
+    const token = ++loadToken;
     const track = queue.currentTrack();
     if (!track) return;
     playerTrack.value = track;
@@ -47,14 +52,20 @@ export function usePlayback() {
     // Local file: use blob URL directly
     if (track.source === "local" && track.extra?.blobUrl) {
       await eng.load(track.extra.blobUrl as string);
+      if (token !== loadToken) return;
       if (playing.value) await eng.play();
       return;
     }
 
     const url = await getSongUrl(track.id, track.source);
+    if (token !== loadToken) return;
     if (!url) { console.warn("无法获取播放地址:", track.name); return; }
 
     const blobUrl = await fetchAudioBlobUrl(url);
+    if (token !== loadToken) {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      return;
+    }
     await eng.load(blobUrl || proxiedAudioUrl(url));
     if (playing.value) await eng.play();
   });

@@ -6,11 +6,23 @@ export interface LyricLine {
 
 // Standard LRC [mm:ss.xx]text
 const LRC_RE = /\[(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?\]/g;
+const YRC_LINE_RE = /^\[(\d+),(\d+)\](.*)$/;
+const YRC_WORD_RE = /\(\d+,\d+(?:,\d+)?\)/g;
 
 export function parseLrc(text: string): LyricLine[] {
   const lines: LyricLine[] = [];
   for (const raw of text.split(/\r?\n/)) {
     if (!raw.trim()) continue;
+    const yrc = raw.match(YRC_LINE_RE);
+    if (yrc) {
+      const content = yrc[3].replace(YRC_WORD_RE, "").trim();
+      if (content) lines.push({
+        t: Number(yrc[1]) / 1000,
+        duration: Math.max(0.45, Number(yrc[2]) / 1000),
+        text: content,
+      });
+      continue;
+    }
     const tags: number[] = [];
     let match;
     LRC_RE.lastIndex = 0;
@@ -32,7 +44,7 @@ export function parseLrc(text: string): LyricLine[] {
   for (let i = 0; i < lines.length; i++) {
     const next = lines[i + 1];
     const dur = next ? next.t - lines[i].t : 4.8;
-    lines[i].duration = Math.max(0.45, Math.min(12, dur));
+    if (!lines[i].duration) lines[i].duration = Math.max(0.45, Math.min(12, dur));
   }
   return lines;
 }
