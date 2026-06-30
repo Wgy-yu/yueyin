@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import SplashScreen from "../components/SplashScreen.vue";
 import WindowControls from "../components/WindowControls.vue";
 import SearchArea from "../components/SearchArea.vue";
@@ -25,7 +25,7 @@ onMounted(async () => {
   }
 
   // Listen for window state changes
-  if ("__TAURI__" in window) {
+  if (isTauri()) {
     try {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       const win = getCurrentWindow();
@@ -33,7 +33,7 @@ onMounted(async () => {
 
       win.onResized(() => {
         win.isMaximized().then((maximized) => {
-          isMaximized.value = maximated;
+          isMaximized.value = maximized;
         });
       });
     } catch (e) {
@@ -82,20 +82,23 @@ onMounted(async () => {
 
 <style scoped>
 #app-window {
-  border-radius: 12px;
+  border-radius: 34px;
   overflow: hidden;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
   transition: border-radius 0.2s ease;
+  clip-path: inset(0 round 34px);
+  transform: translateZ(0);
 }
 
 #app-window.maximized,
 #app-window.fullscreen {
   border-radius: 0;
   box-shadow: none;
+  clip-path: none;
 }
 
 #custom-bg {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 0;
   background: #000;
@@ -114,7 +117,7 @@ onMounted(async () => {
 }
 
 #canvas-container {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 1;
   transition: opacity 1450ms cubic-bezier(0.16, 1, 0.3, 1),

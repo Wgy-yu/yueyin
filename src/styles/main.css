@@ -18,8 +18,15 @@
     -webkit-font-smoothing: antialiased;
     font-family: "Noto Sans SC", "PingFang SC", "HarmonyOS Sans SC", "Inter",
       system-ui, sans-serif;
-    background: #000;
+    background: transparent;
     color: #fff;
+  }
+
+  #app {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: transparent;
   }
 
   ::selection {

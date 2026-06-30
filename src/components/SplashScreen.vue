@@ -50,31 +50,218 @@ let shards: Shard[] = [];
 let canvasW = 0;
 let canvasH = 0;
 let resizeHandler: (() => void) | null = null;
+let cleanupWebGL: (() => void) | null = null;
 
-function initWebGL(canvas: HTMLCanvasElement): (() => void) | null {
-  const gl = canvas.getContext("webgl", { alpha: true, antialias: false, depth: false,
-    stencil: false, premultipliedAlpha: false, powerPreference: "high-performance" }) as WebGLRenderingContext | null;
-  if (!gl) return null;
+function initWebGL(canvas: HTMLCanvasElement): boolean {
+  const gl = canvas.getContext("webgl", {
+    alpha: true,
+    antialias: false,
+    depth: false,
+    stencil: false,
+    premultipliedAlpha: false,
+    powerPreference: "high-performance",
+  }) as WebGLRenderingContext | null;
+  if (!gl) return false;
+
   const vertex = `attribute vec2 aPosition;varying vec2 vUv;void main(){vUv=aPosition*.5+.5;gl_Position=vec4(aPosition,0.,1.);}`;
+
   const fragment = `precision highp float;
-varying vec2 vUv;uniform vec2 uResolution;uniform float uTime;
+varying vec2 vUv;uniform vec2 uResolution;uniform float uTime;uniform vec2 uPointer;uniform float uPointerStrength;
 float sat(float v){return clamp(v,0.,1.);}float ease(float v){v=sat(v);return v*v*(3.-2.*v);}
 mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),u.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1)),u.x),u.y);}
-float loop(vec2 q,float t,float ch){q*=rot(.28+sin(t*.18)*.12);q+=vec2(.055*sin(t*.3+ch),.04*cos(t*.24+ch*1.7));float a=atan(q.y,q.x);float nd=length(q)+sin(a*3.+t*.72+ch*1.9)*.078+sin(a*7.-t*.54+ch)*.02;float wd=length(q*vec2(1.34+.06*sin(t*.25),.82+.04*cos(t*.31)))+.026*sin(q.x*4.4+t*.62)+.018*sin(q.y*5.2-t*.45);float d=mix(mix(wd,abs(q.x)*1.2+abs(q.y)*.84,.32),nd,.2+.04*sin(t*.18+ch));float pat=mod((q.x+q.y)*.62+sin(q.x*5.5+t)*.015+sin(q.y*7.-t*.75)*.012,.2),acc=0.;for(int i=1;i<=6;i++){float f=float(i);acc+=.0011*f*f/max(abs(fract(t*.152-ch*.018+.011*f)*4.7-d+pat),.0065);}float tc=q.x*.92-q.y*.58+.03*sin(q.x*5.2+t*.72);acc+=.0065/max(abs(sin((tc+t*.1+ch*.035)*27.)),.07)*(.5+.3*sin(a*1.2+t+ch));return min(acc,1.95);}
-void main(){vec2 p=vUv*2.-1.;p.x*=uResolution.x/max(uResolution.y,1.);float t=uTime,intro=ease(t/.72),bloom=ease((t-.1)/1.1),climax=exp(-pow((t-3.62)/.58,2.)),pre=ease((t-2.15)/1.25)*(1.-ease((t-3.86)/.72)),after=exp(-pow((t-4.14)/.62,2.)),calm=1.-.22*ease((t-4.75)/.7),settle=1.-.34*ease((t-5.05)/.52);vec2 uv=p*(.98+.05*sin(t*.25))+vec2(0,-.025),fa=normalize(vec2(.86,-.5)),ca=vec2(-fa.y,fa.x);float lane=dot(p,fa),cross=dot(p,ca);uv+=fa*sin(cross*5.4+lane*1.1-t*1.85)*.055*climax+ca*sin(lane*7.2+t*1.25)*.034*climax;uv*=1.+.045*pre-.02*climax;vec3 r=vec3(1,.13,.31),g=vec3(.16,1,.86),y=vec3(1,.76,.28);vec3 lc=r*loop(uv,t,0.)+g*loop(uv*1.018+vec2(.012,-.008),t+.18,1.)+y*loop(uv*.986+vec2(-.01,.01),t+.35,2.);lc+=mix(g,y,.35+.25*sin(t))*loop(uv*1.42+vec2(sin(t*.2)*.08,cos(t*.17)*.05),t*1.12+1.7,2.7)*(.3+.24*pre);float band=exp(-pow((lane+.08*sin(t*.72))/.62,2.));vec3 cc=(mix(g,y,.36)*pow(.5+.5*sin(cross*13.5+lane*2.2-t*3.1),8.)+r*pow(.5+.5*sin(cross*9.-lane*5.4+t*2.4),10.)*.52)*band*climax;cc+=mix(r,g,vUv.x)*exp(-pow((lane-.34)/.72,2.))*after*.13;float beam=exp(-abs(p.y+.005*sin(t*3.))*24.)*(.14+.52*exp(-pow((t-.74)/.34,2.))),mask=smoothstep(-1.55,-.08,p.x)*(1.-smoothstep(.08,1.55,p.x));vec3 col=vec3(.002,.004,.005)+lc*(.56+.46*bloom)*calm*settle+cc*.22+mix(r,g,vUv.x)*beam*mask*(.4+.28*climax);col+=vec3(1,.78,.42)*exp(-dot(p,p)*3.6)*exp(-pow((t-.88)/.4,2.))*.18;col*=.92+.08*sin((vUv.y*uResolution.y+t*52.)*.72);col+=(noise(vUv*uResolution.xy*.52+t*17.)-.5)*.018;col*=intro;col=max(col-vec3(.01,.012,.012),0.);col=vec3(1)-exp(-col*(.62+.18*climax));float vig=smoothstep(1.52,.2,length(p*vec2(.78,1.04)));col*=.38+.86*vig;col+=vec3(.02,.01,.014)*(1.-vig);gl_FragColor=vec4(col,1);}`;
-  const compile = (type: number, source: string) => { const s = gl.createShader(type)!; gl.shaderSource(s, source); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.warn(gl.getShaderInfoLog(s)); return null; } return s; };
-  const vs = compile(gl.VERTEX_SHADER, vertex), fs = compile(gl.FRAGMENT_SHADER, fragment);
-  if (!vs || !fs) return null;
-  const program = gl.createProgram()!; gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return null;
-  const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
-  const position = gl.getAttribLocation(program, "aPosition"), resolution = gl.getUniformLocation(program, "uResolution"), time = gl.getUniformLocation(program, "uTime");
-  const resize = () => { const dpr=Math.min(1.6,Math.max(1,devicePixelRatio||1)); canvas.width=Math.floor(innerWidth*dpr);canvas.height=Math.floor(innerHeight*dpr);gl.viewport(0,0,canvas.width,canvas.height); };
-  resizeHandler=resize; resize(); addEventListener("resize",resize); startTime=performance.now();
-  const draw=()=>{ const elapsed=(performance.now()-startTime)/1000;gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);gl.uniform2f(resolution,canvas.width,canvas.height);gl.uniform1f(time,elapsed);gl.drawArrays(gl.TRIANGLES,0,3);animationId=requestAnimationFrame(draw);}; draw();
-  return draw;
+float loop(vec2 q,float t,float ch){q*=rot(.28+sin(t*.18)*.12);q+=vec2(.055*sin(t*.3+ch),.04*cos(t*.24+ch*1.7));float a=atan(q.y,q.x);float nd=length(q)+sin(a*3.+t*.72+ch*1.9)*.078+sin(a*7.-t*.54+ch)*.02;float wd=length(q*vec2(1.34+.06*sin(t*.25),.82+.04*cos(t*.31)))+.026*sin(q.x*4.4+t*.62)+.018*sin(q.y*5.2-t*.45);float d=mix(mix(wd,abs(q.x)*1.2+abs(q.y)*.84,.32),nd,.2+.04*sin(t*.18+ch));float pat=mod((q.x+q.y)*.62+sin(q.x*5.5+t)*.015+sin(q.y*7.-t*.75)*.012,.2);float tb=t*.152-ch*.018;float acc=0.;for(int i=1;i<=5;i++){float f=float(i);acc+=.0014*f*f/max(abs(fract(tb+.011*f)*4.7-d+pat),.0065);}float tc=q.x*.92-q.y*.58+.03*sin(q.x*5.2+t*.72);acc+=.0065/max(abs(sin((tc+t*.1+ch*.035)*27.)),.07)*(.5+.3*sin(a*1.2+t+ch));return min(acc,1.95);}
+void main(){vec2 p=vUv*2.-1.;p.x*=uResolution.x/max(uResolution.y,1.);float t=uTime,intro=ease(t/.72),bloom=ease((t-.1)/1.1),climax=exp(-pow((t-3.62)/.58,2.)),pre=ease((t-2.15)/1.25)*(1.-ease((t-3.86)/.72)),after=exp(-pow((t-4.14)/.62,2.)),calm=1.-.22*ease((t-4.75)/.7),settle=1.-.34*ease((t-5.05)/.52);vec2 uv=p*(.98+.05*sin(t*.25))+vec2(0,-.025),fa=normalize(vec2(.86,-.5)),ca=vec2(-fa.y,fa.x);float lane=dot(p,fa),cross=dot(p,ca);uv+=fa*sin(cross*5.4+lane*1.1-t*1.85)*.055*climax+ca*sin(lane*7.2+t*1.25)*.034*climax;uv*=1.+.045*pre-.02*climax;vec2 delta=p-uPointer;float dist=length(delta);float influence=1.-smoothstep(.05,.24,dist);vec2 dir=delta/max(dist,.001);vec2 tangent=vec2(-dir.y,dir.x);uv+=dir*influence*.10*uPointerStrength;uv+=tangent*influence*.035*sin(t*1.6)*uPointerStrength;vec3 r=vec3(1,.13,.31),g=vec3(.16,1,.86),y=vec3(1,.76,.28);vec3 lc=r*loop(uv,t,0.)+g*loop(uv*1.018+vec2(.012,-.008),t+.18,1.)+y*loop(uv*.986+vec2(-.01,.01),t+.35,2.);if(pre>.01)lc+=mix(g,y,.35+.25*sin(t))*loop(uv*1.42+vec2(sin(t*.2)*.08,cos(t*.17)*.05),t*1.12+1.7,2.7)*(.3+.24*pre);float band=exp(-pow((lane+.08*sin(t*.72))/.62,2.));vec3 cc=(mix(g,y,.36)*pow(.5+.5*sin(cross*13.5+lane*2.2-t*3.1),8.)+r*pow(.5+.5*sin(cross*9.-lane*5.4+t*2.4),10.)*.52)*band*climax;cc+=mix(r,g,vUv.x)*exp(-pow((lane-.34)/.72,2.))*after*.13;float beam=exp(-abs(p.y+.005*sin(t*3.))*24.)*(.14+.52*exp(-pow((t-.74)/.34,2.))),mask=smoothstep(-1.55,-.08,p.x)*(1.-smoothstep(.08,1.55,p.x));vec3 col=vec3(.002,.004,.005)+lc*(.56+.46*bloom)*calm*settle+cc*.22+mix(r,g,vUv.x)*beam*mask*(.4+.28*climax);col+=vec3(1,.78,.42)*exp(-dot(p,p)*3.6)*exp(-pow((t-.88)/.4,2.))*.18;col*=.92+.08*sin((vUv.y*uResolution.y+t*52.)*.72);col+=(noise(vUv*uResolution.xy*.52+t*17.)-.5)*.018;col*=intro;col=max(col-vec3(.01,.012,.012),0.);col=vec3(1)-exp(-col*(.62+.18*climax));float vig=smoothstep(1.52,.2,length(p*vec2(.78,1.04)));col*=.38+.86*vig;col+=vec3(.02,.01,.014)*(1.-vig);gl_FragColor=vec4(col,1);}`;
+
+  const compile = (type: number, source: string) => {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, source);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.warn(gl.getShaderInfoLog(s));
+      return null;
+    }
+    return s;
+  };
+
+  const vs = compile(gl.VERTEX_SHADER, vertex);
+  const fs = compile(gl.FRAGMENT_SHADER, fragment);
+  if (!vs || !fs) return false;
+
+  const program = gl.createProgram()!;
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return false;
+
+  const buffer = gl.createBuffer()!;
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(
+    gl.ARRAY_BUFFER,
+    new Float32Array([-1, -1, 3, -1, -1, 3]),
+    gl.STATIC_DRAW
+  );
+
+  const position = gl.getAttribLocation(program, "aPosition");
+  const uResolution = gl.getUniformLocation(program, "uResolution");
+  const uTime = gl.getUniformLocation(program, "uTime");
+  const uPointer = gl.getUniformLocation(program, "uPointer");
+  const uPointerStrength = gl.getUniformLocation(program, "uPointerStrength");
+
+  // ── Adaptive render scale ──
+  const FRAME_HISTORY = 90;
+  const frameTimes = new Float64Array(FRAME_HISTORY);
+  let frameIdx = 0;
+  let frameCount = 0;
+  let renderScale = Math.min(Math.max(1, devicePixelRatio || 1), 1.25);
+  let stableLowFrames = 0;
+  let lastFrameTime = 0;
+
+  // ── Pointer damping (plain vars, no Vue reactivity) ──
+  let ptrTargetX = 0;
+  let ptrTargetY = 0;
+  let ptrCurrentX = 0;
+  let ptrCurrentY = 0;
+  let ptrStrengthTarget = 0.65;
+  let ptrStrengthCurrent = 0;
+  let ptrInside = false;
+
+  // ── Visibility pause ──
+  let paused = false;
+
+  const applySize = () => {
+    canvas.width = Math.floor(innerWidth * renderScale);
+    canvas.height = Math.floor(innerHeight * renderScale);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  };
+
+  const onResize = () => applySize();
+  addEventListener("resize", onResize);
+
+  const onPointerMove = (e: PointerEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+    const aspect = canvas.width / Math.max(canvas.height, 1);
+    ptrTargetX = nx * aspect;
+    ptrTargetY = ny;
+    ptrInside = true;
+  };
+
+  const onPointerLeave = () => {
+    ptrInside = false;
+  };
+
+  const onPointerDown = () => {
+    ptrStrengthTarget = 1.0;
+  };
+
+  const onPointerUp = () => {
+    ptrStrengthTarget = 0.65;
+  };
+
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerleave", onPointerLeave);
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointerup", onPointerUp);
+
+  const onVisibility = () => {
+    if (document.hidden) {
+      paused = true;
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+    } else {
+      paused = false;
+      lastFrameTime = 0;
+      draw();
+    }
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+
+  applySize();
+  startTime = performance.now();
+
+  const draw = () => {
+    if (paused) return;
+
+    const now = performance.now();
+    const dt = lastFrameTime > 0 ? now - lastFrameTime : 16.67;
+    lastFrameTime = now;
+
+    // ── Adaptive scale evaluation ──
+    frameTimes[frameIdx] = dt;
+    frameIdx = (frameIdx + 1) % FRAME_HISTORY;
+    frameCount++;
+
+    if (frameCount >= 60) {
+      const n = Math.min(frameCount, FRAME_HISTORY);
+      let sum = 0;
+      for (let i = 0; i < n; i++) sum += frameTimes[i];
+      const avg = sum / n;
+
+      if (avg > 19) {
+        const next = Math.max(0.85, +(renderScale - 0.1).toFixed(2));
+        if (next !== renderScale) {
+          renderScale = next;
+          applySize();
+        }
+        stableLowFrames = 0;
+      } else if (avg < 14) {
+        stableLowFrames++;
+        if (stableLowFrames >= 120) {
+          const next = Math.min(1.35, +(renderScale + 0.05).toFixed(2));
+          if (next !== renderScale) {
+            renderScale = next;
+            applySize();
+          }
+          stableLowFrames = 0;
+        }
+      } else {
+        stableLowFrames = 0;
+      }
+    }
+
+    // ── Pointer damping (per-frame, no alloc) ──
+    ptrCurrentX += (ptrTargetX - ptrCurrentX) * 0.08;
+    ptrCurrentY += (ptrTargetY - ptrCurrentY) * 0.08;
+    const sTarget = ptrInside ? ptrStrengthTarget : 0;
+    ptrStrengthCurrent += (sTarget - ptrStrengthCurrent) * 0.08;
+
+    // ── Render ──
+    const elapsed = (now - startTime) / 1000;
+    gl.useProgram(program);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.enableVertexAttribArray(position);
+    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform2f(uResolution, canvas.width, canvas.height);
+    gl.uniform1f(uTime, elapsed);
+    gl.uniform2f(uPointer, ptrCurrentX, ptrCurrentY);
+    gl.uniform1f(uPointerStrength, ptrStrengthCurrent);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    animationId = requestAnimationFrame(draw);
+  };
+
+  draw();
+
+  cleanupWebGL = () => {
+    paused = true;
+    if (animationId !== null) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+    removeEventListener("resize", onResize);
+    canvas.removeEventListener("pointermove", onPointerMove);
+    canvas.removeEventListener("pointerleave", onPointerLeave);
+    canvas.removeEventListener("pointerdown", onPointerDown);
+    canvas.removeEventListener("pointerup", onPointerUp);
+    document.removeEventListener("visibilitychange", onVisibility);
+  };
+
+  return true;
 }
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -355,10 +542,17 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (animationId) {
+  if (cleanupWebGL) {
+    cleanupWebGL();
+    cleanupWebGL = null;
+  } else if (animationId !== null) {
     cancelAnimationFrame(animationId);
+    animationId = null;
   }
-  if (resizeHandler) window.removeEventListener("resize", resizeHandler);
+  if (resizeHandler) {
+    window.removeEventListener("resize", resizeHandler);
+    resizeHandler = null;
+  }
 });
 
 function handleEnter() {
@@ -376,9 +570,9 @@ function handleEnter() {
     <div class="splash-bg-noise"></div>
 
     <div class="splash-content">
-      <div class="splash-wordmark" aria-label="悦音">
-        <span class="splash-word-yue">悦</span>
-        <span class="splash-word-yin">音</span>
+      <div class="splash-wordmark" aria-label="Melovibe">
+        <span class="splash-word-melo">Melo</span>
+        <span class="splash-word-vibe">v<span class="splash-word-i">i</span>be</span>
       </div>
       <div class="splash-signal-line"></div>
       <div class="splash-sub">沉浸式音乐播放器</div>
@@ -509,9 +703,9 @@ function handleEnter() {
   display: flex;
   align-items: baseline;
   justify-content: center;
-  height: clamp(70px, 12vw, 136px);
-  min-width: min(74vw, 760px);
-  font-size: clamp(52px, 8.8vw, 112px);
+  height: clamp(60px, 10vw, 116px);
+  min-width: min(64vw, 660px);
+  font-size: clamp(46px, 7.6vw, 96px);
   line-height: 0.92;
   font-weight: 720;
   letter-spacing: -0.055em;
@@ -522,8 +716,8 @@ function handleEnter() {
   filter: drop-shadow(0 0 22px rgba(244, 210, 138, 0.075));
 }
 
-.splash-word-yue,
-.splash-word-yin {
+.splash-word-melo,
+.splash-word-vibe {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -532,15 +726,15 @@ function handleEnter() {
   will-change: opacity, transform, letter-spacing;
 }
 
-.splash-word-yue {
+.splash-word-melo {
   opacity: 0;
-  animation: splash-yue-in 5200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: splash-melo-in 5200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   text-shadow: -2px 0 0 rgba(255, 83, 103, 0.24),
     2px 0 0 rgba(122, 215, 194, 0.18), 0 22px 72px rgba(0, 0, 0, 0.58),
     0 0 34px rgba(244, 210, 138, 0.1);
 }
 
-.splash-word-yin {
+.splash-word-vibe {
   opacity: 0;
   letter-spacing: -0.018em;
   background: linear-gradient(
@@ -556,7 +750,49 @@ function handleEnter() {
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  animation: splash-yin-in 5200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: splash-vibe-in 5200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  text-shadow: -2px 0 0 rgba(255, 83, 103, 0.16),
+    2px 0 0 rgba(122, 215, 194, 0.22), 0 0 34px rgba(122, 215, 194, 0.1);
+}
+
+.splash-word-i {
+  display: inline-block;
+  position: relative;
+  width: 0.24em;
+  height: 0.86em;
+  margin: 0 0.022em;
+  vertical-align: -0.015em;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.splash-word-i::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0.015em;
+  width: 0.108em;
+  height: 0.565em;
+  border-radius: 0.06em;
+  background: linear-gradient(180deg, #f8edd1 0%, #d8bd78 100%);
+  transform: translateX(-50%);
+  box-shadow: 0 0 14px rgba(244, 210, 138, 0.12);
+}
+
+.splash-word-i::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0.035em;
+  width: 0.142em;
+  height: 0.142em;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 16px rgba(244, 210, 138, 0.44),
+    0 0 36px rgba(255, 255, 255, 0.16);
+  opacity: 0;
+  transform: translate(-50%, 0.22em) scale(0.34);
+  animation: splash-i-dot-pop 4200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .splash-signal-line {
@@ -636,7 +872,7 @@ function handleEnter() {
   }
 }
 
-@keyframes splash-yue-in {
+@keyframes splash-melo-in {
   0% {
     opacity: 0;
     clip-path: inset(48% 0 49% 0);
@@ -661,44 +897,51 @@ function handleEnter() {
   }
   67% {
     opacity: 1;
-    transform: translate(calc(-50% - clamp(66px, 10.8vw, 130px)), -50%)
+    transform: translate(calc(-50% - clamp(57px, 9.3vw, 112px)), -50%)
       scale(0.998);
     letter-spacing: -0.055em;
   }
   100% {
     opacity: 1;
-    transform: translate(calc(-50% - clamp(66px, 10.8vw, 130px)), -50%)
+    transform: translate(calc(-50% - clamp(57px, 9.3vw, 112px)), -50%)
       scale(0.998);
   }
 }
 
-@keyframes splash-yin-in {
+@keyframes splash-vibe-in {
   0%,
   32% {
     opacity: 0;
     clip-path: inset(52% 0 44% 0);
-    transform: translate(calc(-50% + clamp(78px, 12vw, 142px)), -50%)
+    transform: translate(calc(-50% + clamp(67px, 10.4vw, 123px)), -50%)
       skewX(9deg) scaleX(1.06);
     background-position: 0 0;
   }
   48% {
     opacity: 0.88;
     clip-path: inset(34% 0 32% 0);
-    transform: translate(calc(-50% + clamp(72px, 11.5vw, 138px)), -50%)
+    transform: translate(calc(-50% + clamp(62px, 9.9vw, 119px)), -50%)
       skewX(3deg) scaleX(1.02);
     background-position: 52% 0;
   }
   66% {
     opacity: 1;
     clip-path: inset(0);
-    transform: translate(calc(-50% + clamp(70px, 11.4vw, 136px)), -50%) scale(1);
+    transform: translate(calc(-50% + clamp(60px, 9.8vw, 117px)), -50%) scale(1);
     background-position: 76% 0;
   }
   100% {
     opacity: 1;
-    transform: translate(calc(-50% + clamp(70px, 11.4vw, 136px)), -50%) scale(1);
+    transform: translate(calc(-50% + clamp(60px, 9.8vw, 117px)), -50%) scale(1);
     background-position: 100% 0;
   }
+}
+
+@keyframes splash-i-dot-pop {
+  0%, 48% { opacity: 0; transform: translate(-50%, 0.22em) scale(0.34); }
+  60% { opacity: 1; transform: translate(-50%, -0.018em) scale(1.12); }
+  68% { opacity: 0.92; transform: translate(-50%, 0.01em) scale(0.94); }
+  76%, 100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
 @keyframes splash-signal-line {

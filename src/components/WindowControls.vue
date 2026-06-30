@@ -1,21 +1,29 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isTauri } from "@tauri-apps/api/core";
 
 const isMaximized = ref(false);
-const isTauri = ref(false);
+const runningInTauri = isTauri();
+let unlistenResize: (() => void) | null = null;
 
-onMounted(() => {
-  // Check if running in Tauri
-  isTauri.value = "__TAURI__" in window;
+onMounted(async () => {
+  if (!runningInTauri) return;
+  const win = getCurrentWindow();
+  isMaximized.value = await win.isMaximized();
+  unlistenResize = await win.onResized(async () => {
+    isMaximized.value = await win.isMaximized();
+  });
 });
 
+onUnmounted(() => unlistenResize?.());
+
 async function minimize() {
-  if (!isTauri.value) {
+  if (!runningInTauri) {
     console.log("Window control not available in browser");
     return;
   }
   try {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const win = getCurrentWindow();
     await win.minimize();
   } catch (e) {
@@ -24,12 +32,11 @@ async function minimize() {
 }
 
 async function toggleMaximize() {
-  if (!isTauri.value) {
+  if (!runningInTauri) {
     console.log("Window control not available in browser");
     return;
   }
   try {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const win = getCurrentWindow();
     const maximized = await win.isMaximized();
     if (maximized) {
@@ -44,12 +51,11 @@ async function toggleMaximize() {
 }
 
 async function close() {
-  if (!isTauri.value) {
+  if (!runningInTauri) {
     console.log("Window control not available in browser");
     return;
   }
   try {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const win = getCurrentWindow();
     await win.close();
   } catch (e) {
