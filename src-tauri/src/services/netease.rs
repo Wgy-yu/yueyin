@@ -533,3 +533,116 @@ pub async fn qr_check(key: &str, cookie: &str) -> Result<Value, String> {
     let resp = weapi_post("login/qrcode/client/login", &body, cookie).await?;
     Ok(resp)
 }
+
+/// Fetch user's playlists.
+pub async fn user_playlists(uid: &str, cookie: &str) -> Result<Value, String> {
+    let body = json!({
+        "uid": uid,
+        "limit": 100,
+        "offset": 0,
+    });
+    let resp = weapi_post("user/playlist", &body, cookie).await?;
+    let playlists = resp["playlist"].as_array().cloned().unwrap_or_default();
+    let mapped: Vec<Value> = playlists
+        .iter()
+        .map(|p| {
+            json!({
+                "id": p["id"].as_u64().unwrap_or(0).to_string(),
+                "name": p["name"].as_str().unwrap_or(""),
+                "cover": p["coverImgUrl"].as_str().unwrap_or(""),
+                "trackCount": p["trackCount"].as_u64().unwrap_or(0),
+                "playCount": p["playCount"].as_u64().unwrap_or(0),
+                "creator": p["creator"]["nickname"].as_str().unwrap_or(""),
+                "subscribed": p["subscribed"].as_bool().unwrap_or(false),
+                "specialType": p["specialType"].as_i64().unwrap_or(0),
+                "provider": "netease",
+            })
+        })
+        .collect();
+    Ok(json!({ "playlists": mapped }))
+}
+
+/// Fetch tracks in a playlist.
+pub async fn playlist_tracks(id: &str, cookie: &str) -> Result<Value, String> {
+    let song_id: u64 = id.parse().map_err(|_| "Invalid playlist id")?;
+    let body = json!({
+        "id": song_id,
+        "n": 1000,
+        "s": 0,
+    });
+    let resp = weapi_post("v6/playlist/detail", &body, cookie).await?;
+    let playlist = &resp["playlist"];
+    let track_ids: Vec<u64> = playlist["trackIds"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|t| t["id"].as_u64()).collect())
+        .unwrap_or_default();
+
+    let info = json!({
+        "id": playlist["id"].as_u64().unwrap_or(0).to_string(),
+        "name": playlist["name"].as_str().unwrap_or(""),
+        "cover": playlist["coverImgUrl"].as_str().unwrap_or(""),
+        "trackCount": playlist["trackCount"].as_u64().unwrap_or(0),
+    });
+
+    // Fetch full track details in batches
+    let mut all_tracks: Vec<Value> = Vec::new();
+    for chunk in track_ids.chunks(500) {
+        let c = chunk.iter().map(|id| json!({"id": id})).collect::<Vec<_>>();
+        let detail_body = json!({ "c": c });
+        if let Ok(detail_resp) = weapi_post("v3/song/detail", &detail_body, cookie).await {
+            if let Some(songs) = detail_resp["songs"].as_array() {
+                for s in songs {
+                    all_tracks.push(map_song_to_value(s));
+                }
+            }
+        }
+    }
+
+    Ok(json!({ "playlist": info, "tracks": all_tracks }))
+}
+
+fn map_song_to_value(s: &Value) -> Value {
+    let artists = map_artists(&s["ar"]);
+    let album = &s["al"];
+    let cover = album["picUrl"]
+        .as_str()
+        .or_else(|| album["coverUrl"].as_str())
+        .unwrap_or("")
+        .to_string();
+    json!({
+        "id": s["id"].as_u64().unwrap_or(0).to_string(),
+        "name": s["name"].as_str().unwrap_or(""),
+        "artist": artists.iter().map(|a| a.name.as_str()).collect::<Vec<_>>().join(" / "),
+        "album": album["name"].as_str().unwrap_or(""),
+        "cover": cover,
+        "duration": s["dt"].as_u64().or(s["duration"].as_u64()).unwrap_or(0),
+        "source": "netease",
+    })
+}
+
+/// Batch check liked status.
+pub async fn like_check(ids: &[u64], uid: &str, cookie: &str) -> Result<Value, String> {
+    // Use likelist endpoint
+    let body = json!({ "uid": uid });
+    let resp = weapi_post("song/like/get", &body, cookie).await?;
+    let liked_ids: std::collections::HashSet<u64> = resp["ids"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
+        .unwrap_or_default();
+    let result: Value = ids
+        .iter()
+        .map(|id| (id.to_string(), json!(liked_ids.contains(id))))
+        .collect::<serde_json::Map<String, Value>>()
+        .into();
+    Ok(json!({ "liked": result }))
+}
+
+/// Toggle like status for a song.
+pub async fn like_toggle(id: u64, like: bool, cookie: &str) -> Result<Value, String> {
+    let body = json!({
+        "trackId": id,
+        "like": like,
+    });
+    let resp = weapi_post("song/like", &body, cookie).await?;
+    Ok(json!({ "ok": resp["code"].as_i64() == Some(200) }))
+}

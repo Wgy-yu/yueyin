@@ -217,3 +217,60 @@ pub async fn music_audio_proxy(url: String) -> Result<Vec<u8>, String> {
 
     Ok(bytes.to_vec())
 }
+
+// ---------- Playlists ----------
+
+#[tauri::command]
+pub async fn music_user_playlists(
+    uid: Option<String>,
+    source: Option<String>,
+    cookies: State<'_, CookieStore>,
+) -> Result<Value, String> {
+    let src = source.as_deref().unwrap_or("netease");
+    match src {
+        "qq" => {
+            let qq_cookie = cookies.qq_cookie();
+            let uin = uid.as_deref().unwrap_or("");
+            qq::user_playlists(uin, &qq_cookie).await
+        }
+        _ => {
+            let netease_cookie = cookies.netease_cookie();
+            let uid_str = uid.as_deref().unwrap_or("");
+            netease::user_playlists(uid_str, &netease_cookie).await
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn music_playlist_tracks(
+    id: String,
+    source: Option<String>,
+    cookies: State<'_, CookieStore>,
+) -> Result<Value, String> {
+    let src = source.as_deref().unwrap_or("netease");
+    match src {
+        "qq" => qq::playlist_tracks(&id, &cookies.qq_cookie()).await,
+        _ => netease::playlist_tracks(&id, &cookies.netease_cookie()).await,
+    }
+}
+
+#[tauri::command]
+pub async fn music_like_check(
+    ids: Vec<String>,
+    uid: Option<String>,
+    cookies: State<'_, CookieStore>,
+) -> Result<Value, String> {
+    let u64_ids: Vec<u64> = ids.iter().filter_map(|s| s.parse().ok()).collect();
+    let uid_str = uid.as_deref().unwrap_or("");
+    netease::like_check(&u64_ids, uid_str, &cookies.netease_cookie()).await
+}
+
+#[tauri::command]
+pub async fn music_like_toggle(
+    id: String,
+    like: bool,
+    cookies: State<'_, CookieStore>,
+) -> Result<Value, String> {
+    let song_id: u64 = id.parse().map_err(|_| "Invalid song id")?;
+    netease::like_toggle(song_id, like, &cookies.netease_cookie()).await
+}

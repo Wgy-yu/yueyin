@@ -660,3 +660,112 @@ fn decode_html_entities(text: &str) -> String {
         .replace("&amp;", "&")
         .replace("&nbsp;", " ")
 }
+
+/// Fetch QQ user's playlists.
+pub async fn user_playlists(uin: &str, cookie: &str) -> Result<Value, String> {
+    let resp = qq_music_request(
+        &json!({
+            "comm": {"ct": 24, "cv": 0},
+            "myMusic": {
+                "module": "music.musicasset.HomoMyMusic",
+                "method": "GetMyMusicList",
+                "param": {
+                    "uin": uin,
+                    "type": 0,
+                    "start": 0,
+                    "size": 100,
+                },
+            },
+        }),
+        cookie,
+    )
+    .await?;
+
+    let items = resp
+        .pointer("/myMusic/data/songlist")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let playlists: Vec<Value> = items
+        .iter()
+        .map(|p| {
+            json!({
+                "id": p["dirid"].as_u64().unwrap_or(0).to_string(),
+                "name": p["dirinfo"]["name"].as_str()
+                    .or(p["dissname"].as_str())
+                    .unwrap_or(""),
+                "cover": p["dirinfo"]["picurl"].as_str().unwrap_or(""),
+                "trackCount": p["songnum"].as_u64().unwrap_or(0),
+                "playCount": 0,
+                "creator": "",
+                "subscribed": false,
+                "specialType": 0,
+                "provider": "qq",
+            })
+        })
+        .collect();
+
+    Ok(json!({ "playlists": playlists }))
+}
+
+/// Fetch tracks in a QQ playlist.
+pub async fn playlist_tracks(id: &str, cookie: &str) -> Result<Value, String> {
+    let resp = qq_music_request(
+        &json!({
+            "comm": {"ct": 24, "cv": 0},
+            "playlist": {
+                "module": "playlist.PlayListPlazaSvr",
+                "method": "GetPlayListDetail",
+                "param": {
+                    "disstid": id,
+                    "dirid": 0,
+                    "tag": 1,
+                    "song_num": 500,
+                    "song_begin": 0,
+                    "onlysonglist": 0,
+                    "userinfo": 1,
+                },
+            },
+        }),
+        cookie,
+    )
+    .await?;
+
+    let data = resp.pointer("/playlist/data").unwrap_or(&Value::Null);
+    let diss = &data["dirinfo"];
+    let info = json!({
+        "id": id,
+        "name": diss["name"].as_str().unwrap_or(""),
+        "cover": diss["picurl"].as_str().unwrap_or(""),
+        "trackCount": diss["songnum"].as_u64().unwrap_or(0),
+    });
+
+    let songlist = data["songlist"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    let tracks: Vec<Value> = songlist
+        .iter()
+        .map(|s| {
+            let artists = map_qq_artists(&s["singer"]);
+            let album_mid = s["album"]["mid"]
+                .as_str()
+                .or(s["albummid"].as_str())
+                .unwrap_or("");
+            json!({
+                "id": s["mid"].as_str().or(s["songmid"].as_str()).unwrap_or(""),
+                "name": s["name"].as_str().or(s["title"].as_str()).unwrap_or(""),
+                "artist": artists.iter().map(|a| a.name.as_str()).collect::<Vec<_>>().join(" / "),
+                "album": s["album"]["name"].as_str().unwrap_or(""),
+                "cover": qq_album_cover(album_mid, 300),
+                "duration": s["interval"].as_u64().unwrap_or(0) * 1000,
+                "source": "qq",
+                "mediaMid": s["file"]["media_mid"].as_str().unwrap_or(""),
+            })
+        })
+        .collect();
+
+    Ok(json!({ "playlist": info, "tracks": tracks }))
+}

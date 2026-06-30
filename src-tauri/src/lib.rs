@@ -9,6 +9,8 @@ use commands::music::{
     music_qr_key, music_qr_create, music_qr_check,
     music_qq_login_status, music_qq_login_cookie, music_qq_logout,
     music_audio_proxy,
+    music_user_playlists, music_playlist_tracks,
+    music_like_check, music_like_toggle,
 };
 use db::Database;
 use services::cookie::CookieStore;
@@ -35,7 +37,9 @@ pub fn run() {
             music_login_status, music_login_cookie, music_logout,
             music_qr_key, music_qr_create, music_qr_check,
             music_qq_login_status, music_qq_login_cookie, music_qq_logout,
-            music_audio_proxy
+            music_audio_proxy,
+            music_user_playlists, music_playlist_tracks,
+            music_like_check, music_like_toggle
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
