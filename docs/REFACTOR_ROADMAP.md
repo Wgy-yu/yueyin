@@ -10,6 +10,8 @@
 
 ## 2. 重构原则
 
+所有前端页面、组件和交互动效必须先阅读并遵循 `FRONTEND_REPLICATION_SPEC.md`；涉及静态资源时同时遵循 `FRONTEND_ASSET_MANIFEST.md`。不得凭模型审美重新设计，不得在缺少可靠视觉输入时描述或生成图片信息。
+
 ### 强制使用 Ponytail Skill
 
 所有重构阶段必须先加载并遵循 `ponytail` skill，默认使用 **full** 强度。执行者开始工作时需要明确声明正在使用 Ponytail；若当前环境没有该 skill，应停止实现并先安装或请求提供，不能悄悄忽略此要求。
