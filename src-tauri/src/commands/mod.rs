@@ -1,3 +1,5 @@
+pub mod music;
+
 use tauri::State;
 use crate::db::{Database, QueueTrack};
 

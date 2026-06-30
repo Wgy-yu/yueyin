@@ -1,9 +1,23 @@
 import type { Track, SourceType } from "../types/track";
 
+// Detect Tauri environment
+const isTauri = "__TAURI__" in window || "__TAURI_INTERNALS__" in window;
+
+// Lazy Tauri invoke — only imported when needed
+let tauriInvoke: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null = null;
+
+async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (!tauriInvoke) {
+    const mod = await import("@tauri-apps/api/core");
+    tauriInvoke = mod.invoke;
+  }
+  return tauriInvoke(cmd, args) as Promise<T>;
+}
+
 const API_BASE = "/api";
 
-// ponytail: fetch wrapper, no axios dependency
-async function api<T>(path: string, params?: Record<string, string>): Promise<T> {
+// HTTP fallback for non-Tauri (dev server / Mineradio proxy)
+async function httpApi<T>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(API_BASE + path, window.location.origin);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString());
@@ -43,9 +57,21 @@ function normalizeSong(raw: RawSong, source: SourceType): Track {
   return { id, name, artist, album, coverUrl, duration: duration ? Math.floor(duration / 1000) : undefined, source };
 }
 
+// ---------- Search ----------
+
 export async function searchSongs(keyword: string, source: SourceType = "netease"): Promise<Track[]> {
+  if (isTauri) {
+    const data = await invoke<{ songs?: RawSong[]; provider?: string }>("music_search", {
+      keywords: keyword,
+      limit: 30,
+      source,
+    });
+    const rawSongs = data.songs ?? [];
+    return rawSongs.map((s) => normalizeSong(s, source));
+  }
+
   const endpoint = source === "qq" ? "/qq/search" : "/search";
-  const data = await api<{ result?: { songs?: RawSong[] }; data?: { song?: { list?: RawSong[] } } }>(
+  const data = await httpApi<{ result?: { songs?: RawSong[] }; data?: { song?: { list?: RawSong[] } } }>(
     endpoint,
     { keywords: keyword, limit: "30" }
   );
@@ -53,10 +79,25 @@ export async function searchSongs(keyword: string, source: SourceType = "netease
   return rawSongs.map((s) => normalizeSong(s, source));
 }
 
+// ---------- Song URL ----------
+
 export async function getSongUrl(id: string, source: SourceType = "netease"): Promise<string | null> {
+  if (isTauri) {
+    try {
+      const data = await invoke<{ url?: string; playable?: boolean }>("music_song_url", {
+        id,
+        source,
+        quality: "hires",
+      });
+      return data.url ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   const endpoint = source === "qq" ? "/qq/song/url" : "/song/url";
   try {
-    const data = await api<{ data?: { url?: string }[]; req_0?: { data?: { midurlinfo?: { purl?: string }[] } } }>(
+    const data = await httpApi<{ data?: { url?: string }[]; req_0?: { data?: { midurlinfo?: { purl?: string }[] } } }>(
       endpoint,
       { id, br: "320000" }
     );
@@ -66,16 +107,49 @@ export async function getSongUrl(id: string, source: SourceType = "netease"): Pr
   }
 }
 
+// ---------- Audio proxy ----------
+
 export function proxiedAudioUrl(url: string): string {
   if (!url) return "";
+  if (isTauri) {
+    // In Tauri mode, return the direct URL — the audio element can fetch it directly.
+    // The audio_proxy command is available for CORS-restricted scenarios via invoke.
+    return url;
+  }
   return `${API_BASE}/audio?url=${encodeURIComponent(url)}`;
 }
 
+/** Fetch audio bytes via Tauri command (for CORS-restricted URLs). Returns a Blob URL. */
+export async function fetchAudioBlobUrl(url: string): Promise<string | null> {
+  if (!isTauri) return null;
+  try {
+    const bytes = await invoke<number[]>("music_audio_proxy", { url });
+    const blob = new Blob([new Uint8Array(bytes)]);
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+
+// ---------- Lyrics ----------
+
 export async function fetchLyrics(id: string, source: SourceType = "netease"): Promise<string | null> {
+  if (isTauri) {
+    try {
+      const data = await invoke<{ lyric?: string; tlyric?: string; yrc?: string; qrc?: string }>("music_lyric", {
+        id,
+        source,
+      });
+      return data.yrc ?? data.lyric ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   const endpoint = source === "qq" ? "/qq/lyric" : "/lyric";
   const param = source === "qq" ? "mid" : "id";
   try {
-    const data = await api<{ lrc?: { lyric?: string }; yrc?: { lyric?: string }; lyric?: string }>(
+    const data = await httpApi<{ lrc?: { lyric?: string }; yrc?: { lyric?: string }; lyric?: string }>(
       endpoint,
       { [param]: id }
     );
