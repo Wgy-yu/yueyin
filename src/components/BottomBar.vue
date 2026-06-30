@@ -1,19 +1,29 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { bindButtonAnimations, unbindButtonAnimations } from "../utils/animations";
 import { usePlayerStore } from "../stores/player";
 import { useQueueStore } from "../stores/queue";
 import { animateModeSwitch } from "../utils/animations";
+import { toggleLike as apiToggleLike, checkLiked } from "../services/music";
 
 const barRef = ref<HTMLElement | null>(null);
 const isLiked = ref(false);
 const player = usePlayerStore();
 const queue = useQueueStore();
-const { playing: isPlaying, currentTime, duration } = storeToRefs(player);
+const { playing: isPlaying, currentTime, duration, currentTrack } = storeToRefs(player);
 const progress = computed(() =>
   duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0
 );
+
+// Check liked status when track changes
+watch(currentTrack, async (track) => {
+  if (!track) { isLiked.value = false; return; }
+  try {
+    const liked = await checkLiked([track.id]);
+    isLiked.value = !!liked[track.id];
+  } catch { isLiked.value = false; }
+});
 
 const playModeLabel = computed(() => {
   const map = { loop: "顺序", shuffle: "随机", single: "单曲" };
@@ -31,8 +41,16 @@ function togglePlay() {
   isPlaying.value = !isPlaying.value;
 }
 
-function toggleLike() {
-  isLiked.value = !isLiked.value;
+async function toggleLike() {
+  const track = currentTrack.value;
+  if (!track) return;
+  const newState = !isLiked.value;
+  isLiked.value = newState;
+  try {
+    await apiToggleLike(track.id, newState);
+  } catch {
+    isLiked.value = !newState;
+  }
 }
 
 function handleNext() {
@@ -69,7 +87,7 @@ function formatTime(seconds: number): string {
     <div id="controls">
       <div class="control-cluster actions">
         <div class="control-track">
-          <div id="control-cover" class="control-cover cover-empty"></div>
+          <div id="control-cover" class="control-cover" :class="{ 'cover-empty': !currentTrack?.coverUrl }" :style="currentTrack?.coverUrl ? { backgroundImage: `url(${currentTrack.coverUrl})` } : undefined"></div>
           <div class="control-meta">
             <div id="control-title" class="control-title">{{ player.currentTrack?.name ?? '未播放' }}</div>
             <div id="control-artist" class="control-artist">{{ player.currentTrack?.artist ?? '选择一首歌曲' }}</div>
