@@ -4,10 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "./stores/settings";
 import { usePlayerStore } from "./stores/player";
 import { useQueueStore } from "./stores/queue";
+import { usePlayback } from "./composables/usePlayback";
 
 const settingsStore = useSettingsStore();
 const playerStore = usePlayerStore();
 const queueStore = useQueueStore();
+usePlayback();
 
 onMounted(async () => {
   try {

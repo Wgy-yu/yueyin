@@ -1,8 +1,33 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { storeToRefs } from "pinia";
+import { useSearchStore } from "../stores/search";
+import { useQueueStore } from "../stores/queue";
+import { usePlayerStore } from "../stores/player";
+import type { Track } from "../types/track";
 
-const searchQuery = ref("");
+const searchStore = useSearchStore();
+const queueStore = useQueueStore();
+const playerStore = usePlayerStore();
+const { results, loading, error } = storeToRefs(searchStore);
 const isFocused = ref(false);
+const localQuery = ref("");
+
+function onInput() {
+  searchStore.debouncedSearch(localQuery.value);
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter") searchStore.search(localQuery.value);
+}
+
+function playTrack(track: Track) {
+  queueStore.add(track, "next");
+  queueStore.currentIndex = queueStore.tracks.findIndex(
+    (t) => t.id === track.id && t.source === track.source
+  );
+  playerStore.playing = true;
+}
 </script>
 
 <template>
@@ -23,14 +48,31 @@ const isFocused = ref(false);
         </svg>
         <input
           id="search-input"
-          v-model="searchQuery"
+          v-model="localQuery"
           type="text"
           placeholder="搜索歌曲、歌手..."
           autocomplete="off"
           spellcheck="false"
           @focus="isFocused = true"
           @blur="isFocused = false"
+          @input="onInput"
+          @keydown="onKeydown"
         />
+      </div>
+      <div v-if="results.length || loading || error" id="search-results">
+        <div v-if="loading" class="search-status">搜索中...</div>
+        <div v-else-if="error" class="search-status error">{{ error }}</div>
+        <ul v-else class="result-list">
+          <li
+            v-for="track in results.slice(0, 20)"
+            :key="track.source + ':' + track.id"
+            class="result-item"
+            @mousedown.prevent="playTrack(track)"
+          >
+            <span class="result-name">{{ track.name }}</span>
+            <span class="result-artist">{{ track.artist }}</span>
+          </li>
+        </ul>
       </div>
     </div>
   </div>
@@ -120,6 +162,65 @@ const isFocused = ref(false);
 
 #search-input::placeholder {
   color: rgba(255, 255, 255, 0.22);
+}
+
+#search-results {
+  margin-top: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+  border-radius: 16px;
+  background: rgba(12, 14, 16, 0.88);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+.search-status {
+  padding: 16px 20px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+}
+
+.search-status.error {
+  color: rgba(255, 100, 120, 0.8);
+}
+
+.result-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.result-item:hover {
+  background: rgba(0, 245, 212, 0.06);
+}
+
+.result-name {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.result-artist {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 @media (max-width: 720px) {
