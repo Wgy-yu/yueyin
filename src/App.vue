@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { useSettingsStore } from "./stores/settings";
+
+const settingsStore = useSettingsStore();
 
 onMounted(async () => {
   try {
@@ -9,6 +12,7 @@ onMounted(async () => {
   } catch (e) {
     console.log("Running in browser mode");
   }
+  await settingsStore.load();
 });
 </script>
 
