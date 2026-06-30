@@ -1,5 +1,7 @@
 # Melovibe 登录重构方案
 
+> **纠正（2026-06-30）**：本文最初将 Mineradio 的登录误判为接口二维码。重新核对源码后确认，原项目使用 Electron `BrowserWindow` 打开网易云/QQ 音乐官方网页，并通过独立 session 的 `cookies.get({})` 读取登录会话。此前“恢复后端接口二维码”的主方案不适用于复刻目标，已由 [官方网页登录迁移调研](./OFFICIAL_WEB_LOGIN_RESEARCH.md) 取代。后续实现必须以新文档为准；本文仅保留为错误路径与安全边界记录。
+
 ## 1. 当前阻塞
 
 当前实现尝试通过前端 `WebviewWindow` 打开网易云或 QQ 音乐登录页，并调用：
