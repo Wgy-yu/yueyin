@@ -524,14 +524,69 @@ pub async fn qr_create(key: &str) -> Result<(String, String), String> {
     Ok((img, url))
 }
 
-/// Poll QR login status.
-pub async fn qr_check(key: &str, cookie: &str) -> Result<Value, String> {
-    let body = json!({
-        "key": key,
-        "type": 1,
+/// QR check result with extracted cookie.
+pub struct QrCheckResult {
+    pub body: Value,
+    pub cookie: String,
+}
+
+/// Poll QR login status, preserving Set-Cookie headers.
+pub async fn qr_check_with_cookies(key: &str, existing_cookie: &str) -> Result<QrCheckResult, String> {
+    let csrf = extract_csrf(existing_cookie);
+    let mut payload = json!({ "key": key, "type": 1 });
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert("csrf_token".into(), json!(csrf));
+    }
+    let text = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+    let (params, enc_sec_key) = weapi_encrypt(&text);
+    let form = [
+        ("params", params.as_str()),
+        ("encSecKey", enc_sec_key.as_str()),
+    ];
+    let url = format!("{}/{}", WEAPI_BASE, "login/qrcode/client/login");
+    let resp = client()
+        .post(&url)
+        .header("Referer", "https://music.163.com/")
+        .header("Origin", "https://music.163.com")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", existing_cookie)
+        .form(&form)
+        .send()
+        .await
+        .map_err(|e| format!("二维码登录请求失败: {}", e))?;
+
+    // Extract Set-Cookie headers before consuming body
+    let mut cookie_parts: Vec<String> = Vec::new();
+    for val in resp.headers().get_all("set-cookie") {
+        if let Ok(s) = val.to_str() {
+            // Keep only name=value, strip attributes
+            let name_value = s.split(';').next().unwrap_or("").trim();
+            if !name_value.is_empty() {
+                cookie_parts.push(name_value.to_string());
+            }
+        }
+    }
+
+    // Deduplicate by cookie name
+    let mut seen = std::collections::HashSet::new();
+    cookie_parts.retain(|c| {
+        let name = c.split('=').next().unwrap_or("");
+        seen.insert(name.to_string())
     });
-    let resp = weapi_post("login/qrcode/client/login", &body, cookie).await?;
-    Ok(resp)
+
+    let body = resp.json::<Value>().await
+        .map_err(|e| format!("解析二维码响应失败: {}", e))?;
+
+    // Merge with existing cookie
+    let mut merged = existing_cookie.to_string();
+    for part in &cookie_parts {
+        if !merged.contains(&format!("{}=", part.split('=').next().unwrap_or(""))) {
+            if !merged.is_empty() { merged.push_str("; "); }
+            merged.push_str(part);
+        }
+    }
+
+    Ok(QrCheckResult { body, cookie: merged })
 }
 
 /// Fetch user's playlists.

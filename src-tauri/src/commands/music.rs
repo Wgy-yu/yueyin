@@ -125,39 +125,40 @@ pub async fn music_qr_check(
     key: String,
     cookies: State<'_, CookieStore>,
 ) -> Result<Value, String> {
-    let resp = netease::qr_check(&key, &cookies.netease_cookie()).await?;
-    let code = resp["code"].as_i64().unwrap_or(0);
-    if code == 803 {
-        // Success: try to extract cookie from response
-        if let Some(cookie_val) = extract_cookie_from_response(&resp) {
-            cookies.set_netease_cookie(&cookie_val).ok();
-        }
-    }
-    Ok(resp)
-}
+    let result = netease::qr_check_with_cookies(&key, &cookies.netease_cookie()).await?;
+    let code = result.body["code"].as_i64().unwrap_or(0);
 
-fn extract_cookie_from_response(resp: &Value) -> Option<String> {
-    // Try various locations where cookie might appear
-    for path in &["/cookie", "/body/cookie", "/body/data/cookie", "/body/data/cookies"] {
-        if let Some(val) = resp.pointer(path) {
-            if let Some(s) = val.as_str() {
-                if !s.is_empty() {
-                    return Some(s.to_string());
-                }
-            }
-            // If it's an array of strings
-            if let Some(arr) = val.as_array() {
-                let joined: Vec<&str> = arr
-                    .iter()
-                    .filter_map(|v| v.as_str())
-                    .collect();
-                if !joined.is_empty() {
-                    return Some(joined.join("; "));
-                }
-            }
+    if code == 803 {
+        // Login success: validate cookie contains MUSIC_U
+        if !result.cookie.contains("MUSIC_U=") {
+            return Ok(serde_json::json!({
+                "code": code,
+                "success": false,
+                "error": "MISSING_MUSIC_U",
+                "message": "登录成功但未获取到 MUSIC_U",
+            }));
         }
+        // Save cookie
+        cookies.set_netease_cookie(&result.cookie)?;
+        // Verify by fetching profile
+        let info = netease::login_status(&result.cookie).await;
+        return Ok(serde_json::json!({
+            "code": code,
+            "success": info.logged_in,
+            "loggedIn": info.logged_in,
+            "profile": {
+                "userId": info.user_id,
+                "nickname": info.nickname,
+                "avatar": info.avatar,
+            }
+        }));
     }
-    None
+
+    // Not success yet (800=expired, 801=waiting, 802=scanned)
+    Ok(serde_json::json!({
+        "code": code,
+        "success": false,
+    }))
 }
 
 // ---------- QQ Music auth ----------

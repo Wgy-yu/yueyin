@@ -42,18 +42,19 @@ export const useAccountStore = defineStore("account", () => {
     playlists.value = [];
   }
 
+  // QR login: get key + QR image
   async function startQrLogin(): Promise<{ key: string; img: string }> {
     const key = await getQrKey();
     const { img } = await createQrCode(key);
     return { key, img };
   }
 
-  async function pollQr(key: string): Promise<{ code: number; success: boolean }> {
+  // QR login: poll status. Returns code (800/801/802/803) and profile on success.
+  async function pollQr(key: string): Promise<{ code: number; success: boolean; profile?: { nickname: string; avatar: string } }> {
     const resp = await checkQrStatus(key);
-    // 800=expired, 801=waiting, 802=scanned, 803=success
-    if (resp.code === 803) {
+    if (resp.success && resp.loggedIn) {
       await refreshStatus();
-      return { code: resp.code, success: true };
+      return { code: resp.code, success: true, profile: resp.profile };
     }
     return { code: resp.code, success: false };
   }

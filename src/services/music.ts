@@ -197,8 +197,8 @@ export async function createQrCode(key: string): Promise<{ img: string; url: str
   return invoke<{ img: string; url: string }>("music_qr_create", { key });
 }
 
-export async function checkQrStatus(key: string): Promise<{ code: number; cookie?: string }> {
-  return invoke<{ code: number; cookie?: string }>("music_qr_check", { key });
+export async function checkQrStatus(key: string): Promise<{ code: number; success: boolean; loggedIn?: boolean; profile?: { nickname: string; avatar: string } }> {
+  return invoke("music_qr_check", { key });
 }
 
 // ---------- Playlists ----------
