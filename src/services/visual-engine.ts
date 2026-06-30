@@ -630,6 +630,11 @@ export class VisualEngine {
       this.isDragging = true;
       this.dragStart.x = e.clientX;
       this.dragStart.y = e.clientY;
+      // Create ripple at click position (convert to world space)
+      const rect = container.getBoundingClientRect();
+      const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.addRipple(nx * 2.4, ny * 2.4);
     };
     const onPointerUp = () => { this.isDragging = false; };
     const onPointerLeave = () => { this.mouseActive = 0; this.isDragging = false; };
@@ -722,6 +727,42 @@ export class VisualEngine {
     }
   }
 
+  addRipple(x: number, y: number) {
+    if (!this.rippleData || !this.uniforms) return;
+    // Find a free slot (age >= 2.0 or strength < 0.005)
+    let slot = -1;
+    for (let i = 0; i < 12; i++) {
+      const age = this.rippleData[i * 4 + 2];
+      const str = this.rippleData[i * 4 + 3];
+      if (age >= 2.0 || str < 0.005) { slot = i; break; }
+    }
+    if (slot < 0) slot = 0; // Overwrite oldest
+    this.rippleData[slot * 4] = x;
+    this.rippleData[slot * 4 + 1] = y;
+    this.rippleData[slot * 4 + 2] = 0; // age = 0
+    this.rippleData[slot * 4 + 3] = 1; // strength = 1
+    this.rippleTex!.needsUpdate = true;
+    this.uniforms.uRippleCount.value = Math.min(12, this.uniforms.uRippleCount.value + 1);
+  }
+
+  private tickRipples(dt: number) {
+    if (!this.rippleData || !this.uniforms) return;
+    let activeCount = 0;
+    for (let i = 0; i < 12; i++) {
+      const str = this.rippleData[i * 4 + 3];
+      if (str < 0.005) continue;
+      this.rippleData[i * 4 + 2] += dt; // age
+      // Decay strength after 0.7s
+      const age = this.rippleData[i * 4 + 2];
+      if (age > 0.7) {
+        this.rippleData[i * 4 + 3] = Math.max(0, str - dt * 1.2);
+      }
+      if (this.rippleData[i * 4 + 3] >= 0.005) activeCount++;
+    }
+    this.uniforms.uRippleCount.value = activeCount;
+    this.rippleTex!.needsUpdate = true;
+  }
+
   private animate = () => {
     if (this.paused) return;
     this.animId = requestAnimationFrame(this.animate);
@@ -729,6 +770,9 @@ export class VisualEngine {
     const dt = Math.min(0.05, (now - this.prevTime) / 1000);
     this.prevTime = now;
     if (this.uniforms) this.uniforms.uTime.value += dt;
+
+    // Age and decay ripples
+    this.tickRipples(dt);
 
     // Orbit camera
     this.orbit.theta += (this.orbit.targetTheta - this.orbit.theta) * 0.10;
