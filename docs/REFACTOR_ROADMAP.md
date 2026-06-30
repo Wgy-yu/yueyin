@@ -260,7 +260,13 @@ src-tauri/src/
 
 在 M1–M3 完成前，不建议优先迁移复杂 Three.js 视觉系统。先让数据和播放链路稳定，后续视觉层才能拥有清晰、可靠的输入边界。
 
-## 10. 交接提示词
+## 10. 重构提交记录
+
+| 日期 | 提交 | 范围 | 验证 |
+|---|---|---|---|
+| 2026-06-30 | `重构：拆分歌单组件并完善基础歌单功能` | 拆分 Home 与歌单面板组件；补齐登录态恢复后的歌单自动获取、歌单/曲目错误态；网易云歌单接口返回登录用户标识 | `npm run build`、`cargo test`、`cargo check` |
+
+## 11. 交接提示词
 
 ```text
 请按照 D:\Dev\Repos_self\yueyin\docs\REFACTOR_ROADMAP.md 推进 Melovibe 重构。原项目位于 D:\Dev\Repos_self\Mineradio，目标项目位于 D:\Dev\Repos_self\yueyin。

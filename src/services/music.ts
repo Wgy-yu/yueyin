@@ -35,6 +35,7 @@ interface RawSong {
   artist?: string;
   album?: { name?: string; picUrl?: string };
   albumname?: string;
+  cover?: string;
   img?: string;
   duration?: number;
   dt?: number;
@@ -51,7 +52,7 @@ function normalizeSong(raw: RawSong, source: SourceType): Track {
   else if (raw.artist) artist = raw.artist;
 
   const album = raw.album?.name ?? raw.albumname;
-  const coverUrl = raw.album?.picUrl ?? raw.img;
+  const coverUrl = raw.album?.picUrl ?? raw.cover ?? raw.img;
   const duration = raw.duration ?? raw.dt ?? raw.interval;
 
   return { id, name, artist, album, coverUrl, duration: duration ? Math.floor(duration / 1000) : undefined, source };

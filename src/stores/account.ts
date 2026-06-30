@@ -16,6 +16,7 @@ export const useAccountStore = defineStore("account", () => {
   const playlists = ref<PlaylistInfo[]>([]);
   const playlistTracks = ref<Track[]>([]);
   const playlistLoading = ref(false);
+  const playlistError = ref("");
   const activeSource = ref<SourceType>("netease");
 
   const current = () => activeSource.value === "qq" ? qq.value : netease.value;
@@ -44,6 +45,8 @@ export const useAccountStore = defineStore("account", () => {
     if (source === "qq") qq.value = { loggedIn: false, nickname: "", avatar: "" };
     else netease.value = { loggedIn: false, nickname: "", avatar: "" };
     playlists.value = [];
+    playlistTracks.value = [];
+    playlistError.value = "";
   }
 
   async function openWebLogin(source: SourceType = "netease") {
@@ -77,22 +80,36 @@ export const useAccountStore = defineStore("account", () => {
   async function fetchPlaylists(source?: SourceType) {
     const src = source ?? activeSource.value;
     const info = src === "qq" ? qq.value : netease.value;
-    playlists.value = await getUserPlaylists(info.userId ?? "", src);
+    playlistLoading.value = true;
+    playlistError.value = "";
+    try {
+      playlists.value = await getUserPlaylists(info.userId ?? "", src);
+      playlistTracks.value = [];
+    } catch (error) {
+      playlists.value = [];
+      playlistError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      playlistLoading.value = false;
+    }
   }
 
   async function fetchPlaylistTracks(id: string, source?: SourceType) {
     const src = source ?? activeSource.value;
     playlistLoading.value = true;
+    playlistError.value = "";
     try {
       const result = await getPlaylistTracks(id, src);
       playlistTracks.value = result.tracks;
+    } catch (error) {
+      playlistTracks.value = [];
+      playlistError.value = error instanceof Error ? error.message : String(error);
     } finally {
       playlistLoading.value = false;
     }
   }
 
   return {
-    netease, qq, playlists, playlistTracks, playlistLoading, activeSource,
+    netease, qq, playlists, playlistTracks, playlistLoading, playlistError, activeSource,
     current, refreshStatus, loginCookie, doLogout, openWebLogin,
     startQrLogin, pollQr, fetchPlaylists, fetchPlaylistTracks,
   };

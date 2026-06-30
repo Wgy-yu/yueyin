@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useAccountStore } from "../stores/account";
+import HomeCardGrid from "./home/HomeCardGrid.vue";
+import HomeHero from "./home/HomeHero.vue";
+import HomeRail from "./home/HomeRail.vue";
 import PlaylistPanel from "./PlaylistPanel.vue";
 
 const account = useAccountStore();
@@ -63,59 +66,15 @@ const tiles = ref([
 <template>
   <section id="empty-home" class="active">
     <div class="empty-home-shell">
-      <div class="home-hero">
-        <div class="home-hero-inner">
-          <div class="home-kicker">YUEYIN · 悦音</div>
-          <div class="home-title">沉浸式<br />音乐空间</div>
-          <div class="home-sub">
-            搜索或导入一首歌即可播放；登录后会同步歌单、红心与播客。
-          </div>
-          <div class="home-quick-row">
-            <button class="home-chip">搜索歌曲</button>
-            <button class="home-chip">导入音乐</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="home-grid">
-        <button
-          v-for="card in cards"
-          :key="card.id"
-          class="home-card"
-          :data-home-tone="card.tone"
-          @click="card.id === 1 ? showPlaylist = true : null"
-        >
-          <div class="home-card-label">{{ card.label }}</div>
-          <div class="home-card-title">{{ card.title }}</div>
-          <div class="home-card-sub">{{ card.sub }}</div>
-          <div class="home-card-art"></div>
-        </button>
-      </div>
-
-      <div class="home-rail">
-        <div class="home-section-head">
-          <div class="home-section-title">为你准备</div>
-          <div class="home-section-note">正在整理推荐</div>
-        </div>
-        <div class="home-tile-row">
-          <button
-            v-for="tile in tiles"
-            :key="tile.id"
-            class="home-tile"
-            :data-home-tone="tile.tone"
-          >
-            <div class="home-tile-cover"></div>
-            <div class="home-tile-title">{{ tile.title }}</div>
-            <div class="home-tile-sub">{{ tile.sub }}</div>
-          </button>
-        </div>
-      </div>
+      <HomeHero />
+      <HomeCardGrid :cards="cards" @open-playlists="showPlaylist = true" />
+      <HomeRail :tiles="tiles" />
     </div>
-    </section>
-    <PlaylistPanel v-if="showPlaylist" @close="showPlaylist = false" />
-  </template>
+  </section>
+  <PlaylistPanel v-if="showPlaylist" @close="showPlaylist = false" />
+</template>
 
-<style scoped>
+<style>
 #empty-home {
   position: fixed;
   z-index: 4;

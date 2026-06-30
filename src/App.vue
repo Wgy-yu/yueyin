@@ -27,6 +27,9 @@ onMounted(async () => {
   await queueStore.load();
   await searchStore.loadHistory();
   await accountStore.refreshStatus();
+  if (accountStore.current().loggedIn) {
+    void accountStore.fetchPlaylists();
+  }
 });
 </script>
 

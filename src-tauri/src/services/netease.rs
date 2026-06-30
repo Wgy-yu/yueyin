@@ -800,7 +800,7 @@ pub async fn user_playlists(uid: &str, cookie: &str) -> Result<Value, String> {
             })
         })
         .collect();
-    Ok(json!({ "playlists": mapped }))
+    Ok(json!({ "loggedIn": true, "userId": uid, "playlists": mapped }))
 }
 
 /// Fetch tracks in a playlist.
