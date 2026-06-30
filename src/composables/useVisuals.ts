@@ -1,4 +1,4 @@
-import { watch, onUnmounted } from "vue";
+import { watch, type WatchStopHandle } from "vue";
 import { storeToRefs } from "pinia";
 import { usePlayerStore } from "../stores/player";
 import { VisualEngine } from "../services/visual-engine";
@@ -6,10 +6,12 @@ import type { AudioEngine } from "../services/audio-engine";
 
 let visual: VisualEngine | null = null;
 let rafId: number | null = null;
+let stopTrackWatch: WatchStopHandle | null = null;
 
 export function getVisualEngine(): VisualEngine | null { return visual; }
 
-export function useVisuals(getEngine: () => AudioEngine, container: HTMLElement) {
+export function useVisuals(getEngine: () => AudioEngine | null, container: HTMLElement) {
+  if (visual) return visual;
   const player = usePlayerStore();
   const { playing, currentTrack } = storeToRefs(player);
 
@@ -20,19 +22,26 @@ export function useVisuals(getEngine: () => AudioEngine, container: HTMLElement)
   const tick = () => {
     rafId = requestAnimationFrame(tick);
     if (!playing.value) return;
-    const analysis = getEngine().getAnalysis();
+    const engine = getEngine();
+    if (!engine) return;
+    const analysis = engine.getAnalysis();
     visual!.update(analysis, analysis.beat);
   };
   tick();
 
   // Update cover when track changes
-  watch(currentTrack, (track) => {
+  stopTrackWatch?.();
+  stopTrackWatch = watch(currentTrack, (track) => {
     if (track?.coverUrl) visual?.setCover(track.coverUrl);
-  });
+  }, { immediate: true });
 
-  onUnmounted(() => {
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-    visual?.dispose();
-    visual = null;
-  });
+  return visual;
+}
+
+export function disposeVisuals() {
+  stopTrackWatch?.();
+  stopTrackWatch = null;
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  visual?.dispose();
+  visual = null;
 }

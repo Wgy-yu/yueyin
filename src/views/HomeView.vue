@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import SplashScreen from "../components/SplashScreen.vue";
 import WindowControls from "../components/WindowControls.vue";
@@ -9,7 +9,7 @@ import HomeContent from "../components/HomeContent.vue";
 import BottomBar from "../components/BottomBar.vue";
 import LyricsPanel from "../components/LyricsPanel.vue";
 import { getAudioEngine } from "../composables/usePlayback";
-import { useVisuals } from "../composables/useVisuals";
+import { disposeVisuals, useVisuals } from "../composables/useVisuals";
 import { useDropFiles } from "../composables/useDropFiles";
 
 const showSplash = ref(true);
@@ -21,22 +21,8 @@ const appWindowRef = ref<HTMLElement | null>(null);
 
 function handleSplashEnter() {
   showSplash.value = false;
-  // Mount visual engine after splash exits
   if (canvasContainerRef.value) {
-    const engine = getAudioEngine();
-    if (engine) {
-      useVisuals(() => engine, canvasContainerRef.value!);
-    } else {
-      // ponytail: engine not yet created, defer until first play
-      const interval = setInterval(() => {
-        const eng = getAudioEngine();
-        if (eng && canvasContainerRef.value) {
-          clearInterval(interval);
-          useVisuals(() => eng, canvasContainerRef.value!);
-        }
-      }, 500);
-      setTimeout(() => clearInterval(interval), 10000);
-    }
+    useVisuals(getAudioEngine, canvasContainerRef.value);
   }
 }
 
@@ -66,6 +52,10 @@ onMounted(async () => {
       console.log("Window state listener not available");
     }
   }
+});
+
+onUnmounted(() => {
+  disposeVisuals();
 });
 </script>
 

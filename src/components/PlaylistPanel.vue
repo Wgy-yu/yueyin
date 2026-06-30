@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
+import { gsap } from "gsap";
 import { useAccountStore } from "../stores/account";
 import { useQueueStore } from "../stores/queue";
 import { usePlayerStore } from "../stores/player";
@@ -13,6 +14,8 @@ const emit = defineEmits<{ (e: "close"): void }>();
 const account = useAccountStore();
 const queue = useQueueStore();
 const player = usePlayerStore();
+const panelRef = ref<HTMLElement | null>(null);
+let ctx: gsap.Context | null = null;
 
 function switchSource(src: SourceType) {
   account.activeSource = src;
@@ -21,6 +24,29 @@ function switchSource(src: SourceType) {
 
 onMounted(() => {
   if (!account.playlists.length) account.fetchPlaylists();
+  if (!panelRef.value) return;
+  ctx = gsap.context(() => {
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    gsap.from(".shelf-shell", {
+      x: reduceMotion ? 0 : 80,
+      autoAlpha: 0,
+      duration: reduceMotion ? 0 : 0.58,
+      ease: "power3.out",
+    });
+    gsap.from(".shelf-card", {
+      x: reduceMotion ? 0 : 64,
+      rotationY: reduceMotion ? 0 : -18,
+      autoAlpha: 0,
+      duration: reduceMotion ? 0 : 0.62,
+      stagger: { each: 0.045, from: "start" },
+      ease: "power3.out",
+      delay: reduceMotion ? 0 : 0.08,
+    });
+  }, panelRef.value);
+});
+
+onUnmounted(() => {
+  ctx?.revert();
 });
 
 async function openPlaylist(id: string) {
@@ -47,8 +73,9 @@ function back() {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-[90] flex justify-end bg-black/50 backdrop-blur-md" @click.self="emit('close')">
-    <div class="flex h-full w-[min(420px,88vw)] flex-col overflow-hidden border-l border-white/[0.06] bg-gradient-to-b from-[rgba(22,26,32,.98)] to-[rgba(10,12,16,.99)]">
+  <div ref="panelRef" class="shelf-overlay" @click.self="emit('close')">
+    <div class="shelf-vignette"></div>
+    <div class="shelf-shell">
       <PlaylistHeader :has-tracks="!!account.playlistTracks.length" @back="back" @close="emit('close')" />
 
       <PlaylistSourceTabs v-if="!account.playlistTracks.length" :active-source="account.activeSource" @switch="switchSource" />
@@ -66,3 +93,74 @@ function back() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.shelf-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  justify-content: flex-end;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 78% 42%, rgba(0, 245, 212, 0.1), transparent 24%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.76), rgba(0, 0, 0, 0.28) 55%, rgba(0, 0, 0, 0.14));
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.shelf-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.72), transparent 46%),
+    radial-gradient(circle at 35% 50%, rgba(255, 255, 255, 0.06), transparent 22%);
+}
+
+.shelf-shell {
+  position: relative;
+  display: flex;
+  height: 100%;
+  width: min(650px, 42vw);
+  min-width: 520px;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(180deg, rgba(23, 26, 32, 0.78), rgba(6, 8, 12, 0.9)),
+    radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.08), transparent 28%);
+  box-shadow: -34px 0 120px rgba(0, 0, 0, 0.45), inset 1px 0 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(36px) saturate(1.2);
+  -webkit-backdrop-filter: blur(36px) saturate(1.2);
+}
+
+.shelf-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 46px),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 44px);
+  opacity: 0.42;
+}
+
+.shelf-shell > :deep(*) {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 980px) {
+  .shelf-shell {
+    width: min(620px, 76vw);
+    min-width: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .shelf-shell {
+    width: 100vw;
+  }
+}
+</style>
