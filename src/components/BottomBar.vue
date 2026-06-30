@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { storeToRefs } from "pinia";
 import { bindButtonAnimations, unbindButtonAnimations } from "../utils/animations";
+import { usePlayerStore } from "../stores/player";
+import { useQueueStore } from "../stores/queue";
+import { animateModeSwitch } from "../utils/animations";
 
 const barRef = ref<HTMLElement | null>(null);
-const isPlaying = ref(false);
 const isLiked = ref(false);
-const currentTime = ref(0);
-const duration = ref(0);
+const player = usePlayerStore();
+const queue = useQueueStore();
+const { playing: isPlaying, currentTime, duration } = storeToRefs(player);
 const progress = computed(() =>
   duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0
 );
+
+const playModeLabel = computed(() => {
+  const map = { loop: "顺序", shuffle: "随机", single: "单曲" };
+  return map[player.playMode];
+});
 
 onMounted(() => {
   if (barRef.value) bindButtonAnimations(barRef.value);
@@ -24,6 +33,20 @@ function togglePlay() {
 
 function toggleLike() {
   isLiked.value = !isLiked.value;
+}
+
+function handleNext() {
+  queue.currentIndex = queue.nextIndex(player.playMode);
+}
+
+function handlePrev() {
+  queue.currentIndex = queue.prevIndex();
+}
+
+function handleCycleMode(e: Event) {
+  player.cyclePlayMode();
+  const btn = (e.currentTarget as HTMLElement).closest(".ctrl-btn") as HTMLElement;
+  if (btn) animateModeSwitch(btn);
 }
 
 function formatTime(seconds: number): string {
@@ -48,8 +71,8 @@ function formatTime(seconds: number): string {
         <div class="control-track">
           <div id="control-cover" class="control-cover cover-empty"></div>
           <div class="control-meta">
-            <div id="control-title" class="control-title">未播放</div>
-            <div id="control-artist" class="control-artist">选择一首歌曲</div>
+            <div id="control-title" class="control-title">{{ player.currentTrack?.name ?? '未播放' }}</div>
+            <div id="control-artist" class="control-artist">{{ player.currentTrack?.artist ?? '选择一首歌曲' }}</div>
           </div>
         </div>
         <button
@@ -68,7 +91,7 @@ function formatTime(seconds: number): string {
       </div>
 
       <div class="control-cluster transport">
-        <button class="ctrl-btn" title="播放顺序">
+        <button class="ctrl-btn" :title="playModeLabel" @click="handleCycleMode">
           <svg
             width="19"
             height="19"
@@ -83,7 +106,7 @@ function formatTime(seconds: number): string {
             <path d="M21 13v2a4 4 0 0 1-4 4H3" />
           </svg>
         </button>
-        <button class="ctrl-btn" title="上一首">
+        <button class="ctrl-btn" title="上一首" @click="handlePrev">
           <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
             <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
           </svg>
@@ -113,7 +136,7 @@ function formatTime(seconds: number): string {
             <path d="M6 4h4v16H6zM14 4h4v16h-4z" />
           </svg>
         </button>
-        <button class="ctrl-btn" title="下一首">
+        <button class="ctrl-btn" title="下一首" @click="handleNext">
           <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
             <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
           </svg>
@@ -142,7 +165,7 @@ function formatTime(seconds: number): string {
           <span class="lyrics-word-icon">词</span>
         </button>
         <div class="volume-control">
-          <button class="ctrl-btn" title="音量 / 静音">
+          <button class="ctrl-btn" title="音量 / 静音" @click="player.toggleMute()">
             <svg
               width="18"
               height="18"
