@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { storeToRefs } from "pinia";
 import { useAccountStore } from "../stores/account";
+import { usePlayerStore } from "../stores/player";
 import HomeCardGrid from "./home/HomeCardGrid.vue";
 import HomeHero from "./home/HomeHero.vue";
 import HomeRail from "./home/HomeRail.vue";
 import PlaylistPanel from "./PlaylistPanel.vue";
 
 const account = useAccountStore();
+const { currentTrack } = storeToRefs(usePlayerStore());
 const showPlaylist = ref(false);
 
 const cards = computed(() => [
@@ -64,7 +67,7 @@ const tiles = ref([
 </script>
 
 <template>
-  <section id="empty-home" class="active">
+  <section v-if="!currentTrack" id="empty-home" class="active">
     <div class="empty-home-shell">
       <HomeHero />
       <HomeCardGrid :cards="cards" @open-playlists="showPlaylist = true" />

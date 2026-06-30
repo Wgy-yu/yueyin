@@ -1,7 +1,7 @@
 import { watch } from "vue";
 import { storeToRefs } from "pinia";
 import { AudioEngine } from "../services/audio-engine";
-import { getSongUrl, proxiedAudioUrl } from "../services/music";
+import { fetchAudioBlobUrl, getSongUrl, proxiedAudioUrl } from "../services/music";
 import { usePlayerStore } from "../stores/player";
 import { useQueueStore } from "../stores/queue";
 import { useLyricsStore } from "../stores/lyrics";
@@ -54,7 +54,8 @@ export function usePlayback() {
     const url = await getSongUrl(track.id, track.source);
     if (!url) { console.warn("无法获取播放地址:", track.name); return; }
 
-    await eng.load(proxiedAudioUrl(url));
+    const blobUrl = await fetchAudioBlobUrl(url);
+    await eng.load(blobUrl || proxiedAudioUrl(url));
     if (playing.value) await eng.play();
   });
 

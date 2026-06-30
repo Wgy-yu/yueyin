@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { AudioAnalysis } from "./audio-engine";
+import { fetchAudioBlobUrl, type PlaylistInfo } from "./music";
 
 // ============================================================
 // Full Mineradio vertex shader — all 6 presets ported verbatim
@@ -468,6 +469,7 @@ export class VisualEngine {
   private bloomUniforms: Record<string, THREE.IUniform> | null = null;
   private coverTex: THREE.Texture | null = null;
   private prevCoverTex: THREE.Texture | null = null;
+  private coverBlobUrl: string | null = null;
   private dotTex: THREE.Texture | null = null;
   private rippleData: Float32Array | null = null;
   private rippleTex: THREE.DataTexture | null = null;
@@ -478,9 +480,20 @@ export class VisualEngine {
   private paused = false;
   private preset: Preset = "silk";
   private vinylSpin = 0;
+  private shelf = new THREE.Group();
+  private shelfCards: Array<{
+    playlist: PlaylistInfo;
+    mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+    texture: THREE.CanvasTexture;
+    canvas: HTMLCanvasElement;
+  }> = [];
+  private shelfTarget = 0;
+  private shelfPosition = 0;
+  private shelfEnteredAt = 0;
+  private shelfRaycaster = new THREE.Raycaster();
 
   // Orbit camera state
-  private orbit = { theta: 0.3, phi: 0.2, radius: 5.5, targetTheta: 0.3, targetPhi: 0.2, targetRadius: 5.5 };
+  private orbit = { theta: 0, phi: 0.08, radius: 6.6, targetTheta: 0, targetPhi: 0.08, targetRadius: 6.6 };
   private isDragging = false;
   private dragStart = { x: 0, y: 0 };
 
@@ -502,6 +515,8 @@ export class VisualEngine {
     this.createRippleTexture();
     this.createCoverTextures();
     this.buildParticles();
+    this.shelf.renderOrder = 50;
+    this.scene.add(this.shelf);
     this.bindEvents(container);
     this.prevTime = performance.now();
     this.animate();
@@ -537,18 +552,20 @@ export class VisualEngine {
   }
 
   private buildParticles() {
-    const COUNT = 4800;
+    // Mineradio 默认 coverResolution=1.55：118×1.55 取奇数网格 183。
+    const cols = 183;
+    const rows = 183;
+    const COUNT = cols * rows;
     const PLANE = 4.8;
     const positions = new Float32Array(COUNT * 3);
     const uvs = new Float32Array(COUNT * 2);
     const rands = new Float32Array(COUNT);
-    const side = Math.sqrt(COUNT);
 
     for (let i = 0; i < COUNT; i++) {
-      const ix = i % side;
-      const iy = Math.floor(i / side);
-      const u = ix / side;
-      const v = iy / side;
+      const ix = i % cols;
+      const iy = Math.floor(i / cols);
+      const u = (ix + 0.5) / cols;
+      const v = (iy + 0.5) / rows;
       positions[i * 3] = (u - 0.5) * PLANE;
       positions[i * 3 + 1] = (v - 0.5) * PLANE;
       positions[i * 3 + 2] = 0;
@@ -627,6 +644,7 @@ export class VisualEngine {
       }
     };
     const onPointerDown = (e: PointerEvent) => {
+      if (this.pickShelfCard(e.clientX, e.clientY)) return;
       this.isDragging = true;
       this.dragStart.x = e.clientX;
       this.dragStart.y = e.clientY;
@@ -639,13 +657,20 @@ export class VisualEngine {
     const onPointerUp = () => { this.isDragging = false; };
     const onPointerLeave = () => { this.mouseActive = 0; this.isDragging = false; };
     const onWheel = (e: WheelEvent) => {
+      const rect = container.getBoundingClientRect();
+      if (e.clientX > rect.left + rect.width * 0.68 && this.shelfCards.length) {
+        this.shelfTarget = THREE.MathUtils.clamp(
+          this.shelfTarget + (e.deltaY > 0 ? 1 : -1), 0, this.shelfCards.length - 1,
+        );
+        return;
+      }
       this.orbit.targetRadius += e.deltaY * 0.005;
       this.orbit.targetRadius = Math.max(2.4, Math.min(14, this.orbit.targetRadius));
     };
     const onDblClick = () => {
-      this.orbit.targetTheta = 0.3;
-      this.orbit.targetPhi = 0.2;
-      this.orbit.targetRadius = 5.5;
+      this.orbit.targetTheta = 0;
+      this.orbit.targetPhi = 0.08;
+      this.orbit.targetRadius = 6.6;
     };
     const onVisibility = () => {
       if (document.hidden) {
@@ -684,10 +709,152 @@ export class VisualEngine {
   setPreset(p: Preset) { this.preset = p; }
   getPreset(): Preset { return this.preset; }
 
-  setCover(imageUrl: string) {
+  setPlaylists(playlists: PlaylistInfo[]) {
+    const signature = playlists.map((item) => `${item.provider}:${item.id}:${item.name}:${item.cover}`).join("|");
+    if (this.shelf.userData.signature === signature) return;
+    this.disposeShelfCards();
+    this.shelf.userData.signature = signature;
+    this.shelfTarget = this.shelfPosition = 0;
+    this.shelfEnteredAt = this.uniforms?.uTime.value ?? 0;
+    playlists.forEach((playlist, index) => this.createShelfCard(playlist, index));
+  }
+
+  private createShelfCard(playlist: PlaylistInfo, index: number) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 720;
+    canvas.height = 360;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    const material = new THREE.MeshBasicMaterial({
+      map: texture, transparent: true, opacity: 0, depthWrite: false,
+      depthTest: false, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.05, 1.025), material);
+    mesh.renderOrder = 50 + index;
+    mesh.userData.shelfIndex = index;
+    this.shelf.add(mesh);
+    const card = { playlist, mesh, texture, canvas };
+    this.shelfCards.push(card);
+    this.drawShelfCard(card, false);
+    if (playlist.cover) {
+      const image = new Image();
+      image.onload = () => {
+        card.mesh.userData.cover = image;
+        this.drawShelfCard(card, index === Math.round(this.shelfPosition), image);
+      };
+      fetchAudioBlobUrl(playlist.cover).then((url) => { image.src = url || playlist.cover; });
+    }
+  }
+
+  private drawShelfCard(card: typeof this.shelfCards[number], focused: boolean, cover?: CanvasImageSource) {
+    const ctx = card.canvas.getContext("2d")!;
+    const { canvas, playlist } = card;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.beginPath();
+    ctx.roundRect(18, 18, 684, 324, 32);
+    ctx.fillStyle = "rgba(0,0,0,0.82)";
+    ctx.fill();
+    const glass = ctx.createLinearGradient(18, 18, 702, 342);
+    glass.addColorStop(0, "rgba(255,255,255,0.105)");
+    glass.addColorStop(1, "rgba(255,255,255,0.018)");
+    ctx.fillStyle = glass;
+    ctx.fill();
+    ctx.strokeStyle = focused ? "rgba(116,244,222,0.72)" : "rgba(255,255,255,0.14)";
+    ctx.lineWidth = focused ? 2.2 : 1.1;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(24, 22, 310, 316, 26);
+    ctx.clip();
+    ctx.fillStyle = "rgba(255,255,255,0.04)";
+    ctx.fillRect(24, 22, 310, 316);
+    if (cover) ctx.drawImage(cover, 24, 22, 310, 316);
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(255,255,255,0.76)";
+    ctx.font = '700 17px Inter, "Microsoft YaHei", sans-serif';
+    ctx.fillText(playlist.subscribed ? "收藏歌单" : "我的歌单", 365, 64);
+    ctx.fillStyle = "rgba(255,255,255,0.96)";
+    ctx.font = '700 30px Inter, "Microsoft YaHei", sans-serif';
+    const title = playlist.name.length > 11 ? `${playlist.name.slice(0, 11)}…` : playlist.name;
+    ctx.fillText(title, 365, 112);
+    ctx.fillStyle = "rgba(255,255,255,0.52)";
+    ctx.font = '400 17px Inter, "Microsoft YaHei", sans-serif';
+    ctx.fillText(`${playlist.provider === "qq" ? "QQ" : "NE"} · ${playlist.trackCount} 首 · 播放 ${playlist.playCount}`, 365, 154);
+    if (focused) {
+      ctx.beginPath(); ctx.roundRect(365, 245, 138, 38, 19);
+      ctx.fillStyle = "rgba(239,246,244,0.94)"; ctx.fill();
+      ctx.fillStyle = "#101414"; ctx.font = '800 14px Inter, "Microsoft YaHei", sans-serif';
+      ctx.fillText("▶ 播放歌单", 390, 270);
+      ctx.beginPath(); ctx.roundRect(515, 245, 104, 38, 19);
+      ctx.fillStyle = "rgba(255,255,255,0.055)"; ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.14)"; ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.78)"; ctx.fillText("详情", 548, 270);
+    }
+    card.texture.needsUpdate = true;
+  }
+
+  private updateShelf() {
+    this.shelfPosition += (this.shelfTarget - this.shelfPosition) * 0.16;
+    const time = this.uniforms?.uTime.value ?? 0;
+    this.shelfCards.forEach((card, index) => {
+      const delta = index - this.shelfPosition;
+      const distance = Math.abs(delta);
+      card.mesh.visible = distance <= 5.5;
+      if (!card.mesh.visible) return;
+      const revealRaw = THREE.MathUtils.clamp((time - this.shelfEnteredAt - distance * 0.035) / 0.62, 0, 1);
+      const reveal = revealRaw * revealRaw * (3 - 2 * revealRaw);
+      card.mesh.position.set(3.18 + distance * 0.04 + (1 - reveal) * 0.82, -delta * 0.68, 0.86 - distance * 0.17);
+      card.mesh.rotation.set(-delta * 0.042 - this.mouse.y * 0.024, 0.28 + (1 - reveal) * 0.16 + this.mouse.x * 0.038, 0);
+      const focused = distance < 0.5;
+      card.mesh.scale.setScalar((focused ? 1.32 : Math.max(0.62, 1.18 - distance * 0.15)) * (0.88 + reveal * 0.12));
+      card.mesh.material.opacity = (focused ? 1 : Math.max(0.22, 1 - distance * 0.30)) * reveal * 0.92;
+      card.mesh.renderOrder = 60 + Math.round((6 - Math.min(distance, 6)) * 10);
+      if (card.mesh.userData.focused !== focused) {
+        card.mesh.userData.focused = focused;
+        this.drawShelfCard(card, focused, card.mesh.userData.cover);
+      }
+    });
+  }
+
+  private pickShelfCard(clientX: number, clientY: number) {
+    if (!this.camera || !this.renderer || !this.shelfCards.length) return false;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const pointer = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.shelfRaycaster.setFromCamera(pointer, this.camera);
+    const hit = this.shelfRaycaster.intersectObjects(this.shelfCards.map((card) => card.mesh), false)[0];
+    if (!hit) return false;
+    const index = hit.object.userData.shelfIndex as number;
+    if (Math.abs(index - this.shelfPosition) > 0.5) this.shelfTarget = index;
+    else window.dispatchEvent(new CustomEvent("yueyin:open-playlist", { detail: this.shelfCards[index].playlist }));
+    return true;
+  }
+
+  private disposeShelfCards() {
+    for (const card of this.shelfCards) {
+      this.shelf.remove(card.mesh);
+      card.mesh.geometry.dispose();
+      card.mesh.material.dispose();
+      card.texture.dispose();
+    }
+    this.shelfCards = [];
+  }
+
+  async setCover(imageUrl: string) {
     if (!this.uniforms) return;
+    const proxied = await fetchAudioBlobUrl(imageUrl);
+    if (!this.uniforms) {
+      if (proxied) URL.revokeObjectURL(proxied);
+      return;
+    }
     const loader = new THREE.TextureLoader();
-    loader.load(imageUrl, (tex) => {
+    loader.load(proxied || imageUrl, (tex) => {
       if (this.coverTex) {
         // Shift current to prev for crossfade
         this.prevCoverTex?.dispose();
@@ -699,6 +866,8 @@ export class VisualEngine {
       this.uniforms!.uCoverTex.value = tex;
       this.uniforms!.uHasCover.value = 1;
       this.uniforms!.uColorMixT.value = 0;
+      if (this.coverBlobUrl) URL.revokeObjectURL(this.coverBlobUrl);
+      this.coverBlobUrl = proxied;
     });
   }
 
@@ -785,6 +954,8 @@ export class VisualEngine {
       this.camera.lookAt(0, 0, 0);
     }
 
+    this.updateShelf();
+
     this.renderer?.render(this.scene!, this.camera!);
   };
 
@@ -792,6 +963,7 @@ export class VisualEngine {
     this.paused = true;
     if (this.animId) { cancelAnimationFrame(this.animId); this.animId = null; }
     this._cleanup?.();
+    this.disposeShelfCards();
     this.particles?.geometry.dispose();
     this.material?.dispose();
     this.bloomMaterial?.dispose();
@@ -799,6 +971,7 @@ export class VisualEngine {
     this.prevCoverTex?.dispose();
     this.dotTex?.dispose();
     this.rippleTex?.dispose();
+    if (this.coverBlobUrl) URL.revokeObjectURL(this.coverBlobUrl);
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
     this.renderer = null;

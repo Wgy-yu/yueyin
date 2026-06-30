@@ -24,6 +24,7 @@ export class AudioEngine {
   private energyIdx = 0;
   private energyFull = false;
   private prevBeat = 0;
+  private blobUrl: string | null = null;
 
   private ensureAudio(): HTMLAudioElement {
     if (!this.audio) {
@@ -105,6 +106,8 @@ export class AudioEngine {
 
   async load(url: string) {
     const audio = this.ensureAudio();
+    if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
+    this.blobUrl = url.startsWith("blob:") ? url : null;
     audio.src = url;
     audio.load();
   }
@@ -146,6 +149,8 @@ export class AudioEngine {
   dispose() {
     if (this.fadeTimer) { clearTimeout(this.fadeTimer); this.fadeTimer = null; }
     this.audio?.pause();
+    if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
+    this.blobUrl = null;
     this.audio = null;
     this.source = null;
     this.gain = null;
