@@ -25,6 +25,32 @@ Ponytail 在本项目中的具体约束：
 - 非平凡逻辑至少保留一个最小可运行检查；不为简单代码搭建庞大测试框架。
 - 绝不简化掉数据安全、输入校验、错误处理、数据库迁移、凭据保护和无障碍基础。
 
+### 涉及动画时强制使用 GSAP Skills
+
+凡是迁移、实现、重构或评审 GSAP 动画，必须先加载 `gsap-core` skill；若当前环境没有对应 skill，应停止该动画任务并先安装或请求提供，不得凭印象编写 GSAP API。
+
+按任务内容追加加载专项 skill：
+
+| 动画任务 | 必须使用的 skill |
+|---|---|
+| `gsap.to/from/fromTo`、ease、stagger、响应式动画 | `gsap-core` |
+| 多阶段编排、启动/退出序列、可暂停或反向动画 | `gsap-timeline` |
+| 动画掉帧、批量元素、Three.js 属性 tween、性能评审 | `gsap-performance` |
+| Vue 生命周期与组件清理 | `gsap-frameworks` |
+| ScrollTrigger 滚动驱动 | `gsap-scrolltrigger` |
+| Flip、Draggable、MotionPath 等插件 | `gsap-plugins` |
+| clamp、mapRange、wrap 等 GSAP 工具 | `gsap-utils` |
+
+项目约束：
+
+- 简单 hover、颜色或单段过渡优先 CSS；只有需要编排、运行时控制、复杂缓动或动态值时才使用 GSAP。
+- Vue 组件中的 tween、timeline、matchMedia 和事件必须在卸载时 kill/revert，禁止遗留动画实例。
+- 优先动画 `x/y/scale/rotation/autoAlpha`，避免频繁动画 `top/left/width/height` 导致布局抖动。
+- 多步骤动画使用 timeline，不用堆叠 delay 模拟时间轴。
+- 必须通过 `gsap.matchMedia()` 尊重 `prefers-reduced-motion`。
+- Three.js 动画只 tween 数值对象或 uniforms，不在每帧创建新 tween。
+- 重构 Mineradio 现有动画时，先记录原 duration、ease、stagger、overwrite 和清理行为，再保持等效迁移。
+
 1. **行为优先于代码美观**：先保证与 Mineradio 一致，再优化结构。
 2. **按垂直功能切片**：一个阶段同时完成 UI、状态、服务、Tauri 命令和数据表，不留下半套系统。
 3. **渲染与业务隔离**：Three.js/WebGL 不读取 Vue DOM，不直接修改 Pinia；通过明确的事件和快照通信。
@@ -238,6 +264,8 @@ src-tauri/src/
 请按照 D:\Dev\Repos_self\yueyin\docs\REFACTOR_ROADMAP.md 推进 Melovibe 重构。原项目位于 D:\Dev\Repos_self\Mineradio，目标项目位于 D:\Dev\Repos_self\yueyin。
 
 开始前必须加载并使用 ponytail skill，强度为 full，并在进度消息中明确说明。遵循 YAGNI、标准库/平台原生能力优先、复用优先、最少文件和最短正确 diff；不要创建单实现接口、预留式工厂、通用基类或当前阶段用不到的数据库表。若环境没有 ponytail skill，先停止并报告，不得自行跳过。
+
+凡任务涉及 GSAP，必须先加载 gsap-core；根据任务追加 gsap-timeline、gsap-performance、gsap-frameworks、gsap-scrolltrigger、gsap-plugins 或 gsap-utils。简单动画优先 CSS；GSAP 实例必须随 Vue 组件卸载而清理，必须支持 prefers-reduced-motion。若所需 GSAP skill 不可用，停止动画实现并报告。
 
 本次只执行路线图中的一个明确阶段，不做跨阶段大改。开始前定位 Mineradio public/index.html 和 server.js 中对应功能，列出行为、存储 key、接口和依赖；然后在 yueyin 中按 feature/store/service/repository 分层迁移。保持现有 UI 和行为，不擅自重新设计。所有 Tauri 命令需注册并配置 capability，结构化持久化使用 SQLite migration，不新增 localStorage 技术债。完成后运行 npm run build、cargo check 和该阶段相关测试，并记录已迁移范围、兼容桥接、数据迁移与剩余风险。
 
