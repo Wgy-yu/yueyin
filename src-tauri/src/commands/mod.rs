@@ -1,5 +1,5 @@
 use tauri::State;
-use crate::db::Database;
+use crate::db::{Database, QueueTrack};
 
 #[tauri::command]
 pub fn get_app_version() -> String {
@@ -21,4 +21,14 @@ pub fn get_setting(db: State<'_, Database>, key: String) -> Result<Option<String
 #[tauri::command]
 pub fn set_setting(db: State<'_, Database>, key: String, value: String) -> Result<(), String> {
     db.set_setting(&key, &value)
+}
+
+#[tauri::command]
+pub fn save_queue(db: State<'_, Database>, tracks: Vec<QueueTrack>) -> Result<(), String> {
+    db.save_queue(&tracks)
+}
+
+#[tauri::command]
+pub fn load_queue(db: State<'_, Database>) -> Result<Vec<QueueTrack>, String> {
+    db.load_queue()
 }

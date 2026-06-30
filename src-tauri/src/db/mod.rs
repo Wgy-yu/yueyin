@@ -14,6 +14,18 @@ const MIGRATIONS: &[&str] = &[
         value TEXT NOT NULL,
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );",
+    // v2: play queue persistence
+    "CREATE TABLE IF NOT EXISTS play_queue (
+        position    INTEGER PRIMARY KEY,
+        track_id    TEXT NOT NULL,
+        track_name  TEXT NOT NULL,
+        artist      TEXT NOT NULL,
+        album       TEXT,
+        cover_url   TEXT,
+        duration    INTEGER,
+        source      TEXT NOT NULL,
+        extra       TEXT
+    );",
 ];
 
 impl Database {
@@ -86,4 +98,64 @@ impl Database {
             .map_err(|e| format!("写入设置失败: {}", e))?;
         Ok(())
     }
+
+    // ponytail: queue is small (<500 items), single transaction replace-all is fine
+    pub fn save_queue(&self, tracks: &[QueueTrack]) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
+        conn.execute_batch("BEGIN; DELETE FROM play_queue;")
+            .map_err(|e| format!("清空队列失败: {}", e))?;
+        {
+            let mut stmt = conn
+                .prepare("INSERT INTO play_queue (position,track_id,track_name,artist,album,cover_url,duration,source,extra) VALUES (?,?,?,?,?,?,?,?,?)")
+                .map_err(|e| format!("准备队列插入失败: {}", e))?;
+            for (i, t) in tracks.iter().enumerate() {
+                stmt.execute(params![
+                    i as i64, t.track_id, t.track_name, t.artist,
+                    t.album, t.cover_url, t.duration, t.source, t.extra
+                ])
+                .map_err(|e| format!("插入队列项 {} 失败: {}", i, e))?;
+            }
+        }
+        conn.execute_batch("COMMIT;")
+            .map_err(|e| format!("提交队列失败: {}", e))?;
+        Ok(())
+    }
+
+    pub fn load_queue(&self) -> Result<Vec<QueueTrack>, String> {
+        let conn = self.conn.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
+        let mut stmt = conn
+            .prepare("SELECT track_id,track_name,artist,album,cover_url,duration,source,extra FROM play_queue ORDER BY position")
+            .map_err(|e| format!("准备队列查询失败: {}", e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(QueueTrack {
+                    track_id: row.get(0)?,
+                    track_name: row.get(1)?,
+                    artist: row.get(2)?,
+                    album: row.get(3)?,
+                    cover_url: row.get(4)?,
+                    duration: row.get(5)?,
+                    source: row.get(6)?,
+                    extra: row.get(7)?,
+                })
+            })
+            .map_err(|e| format!("查询队列失败: {}", e))?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| format!("读取队列行失败: {}", e))?);
+        }
+        Ok(result)
+    }
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct QueueTrack {
+    pub track_id: String,
+    pub track_name: String,
+    pub artist: String,
+    pub album: Option<String>,
+    pub cover_url: Option<String>,
+    pub duration: Option<i64>,
+    pub source: String,
+    pub extra: Option<String>,
 }

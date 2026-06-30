@@ -1,7 +1,7 @@
 mod commands;
 mod db;
 
-use commands::{get_app_version, get_system_info, get_setting, set_setting};
+use commands::{get_app_version, get_system_info, get_setting, set_setting, save_queue, load_queue};
 use db::Database;
 use tauri::Manager;
 
@@ -18,7 +18,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_app_version, get_system_info, get_setting, set_setting
+            get_app_version, get_system_info, get_setting, set_setting,
+            save_queue, load_queue
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

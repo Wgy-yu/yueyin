@@ -2,8 +2,12 @@
 import { onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "./stores/settings";
+import { usePlayerStore } from "./stores/player";
+import { useQueueStore } from "./stores/queue";
 
 const settingsStore = useSettingsStore();
+const playerStore = usePlayerStore();
+const queueStore = useQueueStore();
 
 onMounted(async () => {
   try {
@@ -13,6 +17,8 @@ onMounted(async () => {
     console.log("Running in browser mode");
   }
   await settingsStore.load();
+  playerStore.init();
+  await queueStore.load();
 });
 </script>
 
