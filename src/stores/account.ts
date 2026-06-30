@@ -31,8 +31,11 @@ export const useAccountStore = defineStore("account", () => {
 
   async function loginCookie(cookie: string, source: SourceType = "netease") {
     const info = await loginWithCookie(cookie, source);
+    activeSource.value = source;
     if (source === "qq") qq.value = info;
     else netease.value = info;
+    playlists.value = [];
+    playlistTracks.value = [];
     return info;
   }
 
@@ -45,8 +48,12 @@ export const useAccountStore = defineStore("account", () => {
 
   async function openWebLogin(source: SourceType = "netease") {
     const info = await apiOpenWebLogin(source);
+    activeSource.value = source;
     if (source === "qq") qq.value = info;
     else netease.value = info;
+    playlists.value = [];
+    playlistTracks.value = [];
+    if (info.loggedIn) await fetchPlaylists(source);
     return info;
   }
 

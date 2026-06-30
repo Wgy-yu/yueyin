@@ -125,7 +125,17 @@ pub async fn music_open_web_login(
         if app.get_webview_window(label).is_none() {
             return Err("LOGIN_CANCELLED: 登录窗口已关闭".into());
         }
-        let header = build_webview_cookie_header(&window, is_qq)?;
+        let cookie_snapshot = read_webview_cookies(&window, is_qq)?;
+        if cookie_snapshot.has_login_candidate() {
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "[music-login] provider={} url={:?} cookies={}",
+                if is_qq { "qq" } else { "netease" },
+                window.url().ok(),
+                cookie_snapshot.names.join(",")
+            );
+        }
+        let header = cookie_snapshot.header;
         if is_qq {
             if qq_cookie_has_login(&header) {
                 cookies.set_qq_cookie(&header)?;
@@ -156,10 +166,38 @@ pub fn music_cancel_web_login(app: tauri::AppHandle) {
     }
 }
 
-fn build_webview_cookie_header(
+struct LoginCookieSnapshot {
+    header: String,
+    names: Vec<String>,
+}
+
+impl LoginCookieSnapshot {
+    fn has_login_candidate(&self) -> bool {
+        self.names.iter().any(|name| {
+            matches!(
+                name.as_str(),
+                "MUSIC_U"
+                    | "MUSIC_A"
+                    | "__csrf"
+                    | "uin"
+                    | "qqmusic_uin"
+                    | "wxuin"
+                    | "p_uin"
+                    | "qm_keyst"
+                    | "qqmusic_key"
+                    | "music_key"
+                    | "p_skey"
+                    | "skey"
+                    | "wxskey"
+            )
+        })
+    }
+}
+
+fn read_webview_cookies(
     window: &tauri::WebviewWindow,
     is_qq: bool,
-) -> Result<String, String> {
+) -> Result<LoginCookieSnapshot, String> {
     let allowed = |domain: &str| {
         let domain = domain.trim_start_matches('.').to_ascii_lowercase();
         if is_qq {
@@ -172,14 +210,18 @@ fn build_webview_cookie_header(
         }
     };
     let mut values = HashMap::new();
+    let mut names = Vec::new();
     for cookie in window
         .cookies()
         .map_err(|e| format!("读取登录会话失败: {e}"))?
     {
         if cookie.domain().is_none_or(allowed) && !cookie.value().is_empty() {
+            names.push(cookie.name().to_string());
             values.insert(cookie.name().to_string(), cookie.value().to_string());
         }
     }
+    names.sort();
+    names.dedup();
     let priority: &[&str] = if is_qq {
         &[
             "uin",
@@ -208,7 +250,10 @@ fn build_webview_cookie_header(
         rest.into_iter()
             .map(|(name, value)| format!("{name}={value}")),
     );
-    Ok(pairs.join("; "))
+    Ok(LoginCookieSnapshot {
+        header: pairs.join("; "),
+        names,
+    })
 }
 
 fn cookie_value(cookie: &str, name: &str) -> Option<String> {

@@ -2,10 +2,11 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::crypto::weapi_encrypt;
+use super::crypto::{eapi_encrypt, weapi_encrypt};
 use super::http_client::client;
 
 const WEAPI_BASE: &str = "https://music.163.com/weapi";
+const EAPI_BASE: &str = "https://interface.music.163.com/eapi";
 
 // ---------- Shared types ----------
 
@@ -213,9 +214,14 @@ async fn weapi_post(endpoint: &str, body: &Value, cookie: &str) -> Result<Value,
         .send()
         .await
         .map_err(|e| format!("请求网易云 API 失败: {}", e))?;
-    resp.json::<Value>()
+    let text = resp
+        .text()
         .await
-        .map_err(|e| format!("解析网易云响应失败: {}", e))
+        .map_err(|e| format!("读取网易云响应失败: {}", e))?;
+    serde_json::from_str::<Value>(&text).map_err(|e| {
+        let preview: String = text.chars().take(120).collect();
+        format!("解析网易云响应失败: {e}; 响应片段: {preview}")
+    })
 }
 
 fn extract_csrf(cookie: &str) -> String {
@@ -226,6 +232,87 @@ fn extract_csrf(cookie: &str) -> String {
         }
     }
     String::new()
+}
+
+fn cookie_field(cookie: &str, name: &str) -> String {
+    for part in cookie.split(';') {
+        let part = part.trim();
+        if let Some(val) = part.strip_prefix(name).and_then(|s| s.strip_prefix('=')) {
+            return val.trim().to_string();
+        }
+    }
+    String::new()
+}
+
+fn eapi_header(cookie: &str) -> Value {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs().to_string())
+        .unwrap_or_else(|_| "0".into());
+    let mut header = json!({
+        "os": "iPhone OS",
+        "appver": "9.0.90",
+        "versioncode": "140",
+        "osver": "16.2",
+        "channel": "distribution",
+        "buildver": now,
+        "__csrf": extract_csrf(cookie),
+    });
+    if let Some(obj) = header.as_object_mut() {
+        let music_u = cookie_field(cookie, "MUSIC_U");
+        let music_a = cookie_field(cookie, "MUSIC_A");
+        if !music_u.is_empty() {
+            obj.insert("MUSIC_U".into(), json!(music_u));
+        }
+        if !music_a.is_empty() {
+            obj.insert("MUSIC_A".into(), json!(music_a));
+        }
+    }
+    header
+}
+
+async fn eapi_post(uri: &str, body: &Value, cookie: &str) -> Result<Value, String> {
+    let mut payload = body.clone();
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert("header".into(), eapi_header(cookie));
+    }
+    let text = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+    let params = eapi_encrypt(uri, &text);
+    let path = uri
+        .strip_prefix("/api/")
+        .ok_or_else(|| format!("无效 eapi 路径: {uri}"))?;
+    let url = format!("{EAPI_BASE}/{path}");
+    let resp = client()
+        .post(&url)
+        .header(
+            "User-Agent",
+            "NeteaseMusic/9.0.90.240122161425(9009000);Dalvik/2.1.0",
+        )
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", cookie)
+        .form(&[("params", params.as_str())])
+        .send()
+        .await
+        .map_err(|e| format!("请求网易云 eapi 失败: {}", e))?;
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| format!("读取网易云 eapi 响应失败: {}", e))?;
+    serde_json::from_str::<Value>(&text).map_err(|e| {
+        let preview: String = text.chars().take(120).collect();
+        format!("解析网易云 eapi 响应失败: {e}; 响应片段: {preview}")
+    })
+}
+
+async fn song_detail(ids: &[u64], cookie: &str) -> Result<Value, String> {
+    let c = format!(
+        "[{}]",
+        ids.iter()
+            .map(|id| format!("{{\"id\":{id}}}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    weapi_post("v3/song/detail", &json!({ "c": c }), cookie).await
 }
 
 // ---------- Public API ----------
@@ -239,7 +326,7 @@ pub async fn search(keywords: &str, limit: u32, cookie: &str) -> Result<Vec<Nete
         "offset": 0,
         "total": true,
     });
-    let resp = weapi_post("cloudsearch/get/web", &body, cookie).await?;
+    let resp = eapi_post("/api/cloudsearch/pc", &body, cookie).await?;
     let songs_val = resp
         .pointer("/result/songs")
         .and_then(|v| v.as_array())
@@ -254,13 +341,7 @@ pub async fn search(keywords: &str, limit: u32, cookie: &str) -> Result<Vec<Nete
         .map(|s| s.id)
         .collect();
     if !missing.is_empty() {
-        if let Ok(detail_resp) = weapi_post(
-            "v3/song/detail",
-            &json!({ "c": missing.iter().map(|id| json!({"id": id})).collect::<Vec<_>>() }),
-            cookie,
-        )
-        .await
-        {
+        if let Ok(detail_resp) = song_detail(&missing, cookie).await {
             if let Some(songs) = detail_resp["songs"].as_array() {
                 let id_to_pic: std::collections::HashMap<u64, String> = songs
                     .iter()
@@ -374,12 +455,11 @@ pub async fn song_url(
 
 async fn try_song_url_v1(id: u64, level: &str, cookie: &str) -> Result<Value, String> {
     let body = json!({
-        "ids": [id],
+        "ids": format!("[{id}]"),
         "level": level,
         "encodeType": "flac",
-        "header": {"os": "pc", "appver": "2.9.7"},
     });
-    let resp = weapi_post("song/enhance/player/url/v1", &body, cookie).await?;
+    let resp = eapi_post("/api/song/enhance/player/url/v1", &body, cookie).await?;
     let d = resp.pointer("/data/0").cloned().unwrap_or(Value::Null);
     if d.is_null() || d["url"].as_str().is_none() {
         return Err("no url".into());
@@ -389,10 +469,10 @@ async fn try_song_url_v1(id: u64, level: &str, cookie: &str) -> Result<Value, St
 
 async fn try_song_url(id: u64, br: u64, cookie: &str) -> Result<Value, String> {
     let body = json!({
-        "ids": [id],
+        "ids": format!("[\"{id}\"]"),
         "br": br,
     });
-    let resp = weapi_post("song/enhance/player/url", &body, cookie).await?;
+    let resp = eapi_post("/api/song/enhance/player/url", &body, cookie).await?;
     let d = resp.pointer("/data/0").cloned().unwrap_or(Value::Null);
     if d.is_null() || d["url"].as_str().is_none() {
         return Err("no url".into());
@@ -456,7 +536,23 @@ pub async fn lyric(id: u64, cookie: &str) -> Result<LyricResult, String> {
         "kv": -1,
         "rv": -1,
     });
-    let resp = weapi_post("song/lyric", &body, cookie).await?;
+    let resp = eapi_post(
+        "/api/song/lyric/v1",
+        &json!({
+            "id": id,
+            "cp": false,
+            "tv": 0,
+            "lv": 0,
+            "rv": 0,
+            "kv": 0,
+            "yv": 0,
+            "ytv": 0,
+            "yrv": 0,
+        }),
+        cookie,
+    )
+    .await
+    .or(eapi_post("/api/song/lyric", &body, cookie).await)?;
 
     let lrc = resp["lrc"]["lyric"].as_str().unwrap_or("").to_string();
     let tlyric = resp["tlyric"]["lyric"].as_str().unwrap_or("").to_string();
@@ -473,6 +569,9 @@ pub async fn lyric(id: u64, cookie: &str) -> Result<LyricResult, String> {
 
 /// Get login status by checking the cookie.
 pub async fn login_status(cookie: &str) -> LoginInfo {
+    let has_music_u = cookie
+        .split(';')
+        .any(|part| part.trim().starts_with("MUSIC_U="));
     if cookie.is_empty() {
         return LoginInfo {
             logged_in: false,
@@ -488,9 +587,11 @@ pub async fn login_status(cookie: &str) -> LoginInfo {
         };
     }
 
-    // Try login_status endpoint
     let body = json!({});
-    match weapi_post("w/user/getaccountinfo", &body, cookie).await {
+    let resp = weapi_post("w/nuser/account/get", &body, cookie)
+        .await
+        .or(weapi_post("nuser/account/get", &body, cookie).await);
+    match resp {
         Ok(resp) => {
             let profile = &resp["profile"];
             let account = &resp["account"];
@@ -499,16 +600,21 @@ pub async fn login_status(cookie: &str) -> LoginInfo {
                 .map(|s| s.to_string())
                 .or_else(|| profile["userId"].as_u64().map(|id| id.to_string()))
                 .or_else(|| account["id"].as_u64().map(|id| id.to_string()));
+            let logged_in = user_id.is_some() || has_music_u;
             let nickname = profile["nickname"]
                 .as_str()
-                .unwrap_or("网易云用户")
+                .unwrap_or(if has_music_u {
+                    "网易云音乐用户"
+                } else {
+                    "网易云用户"
+                })
                 .to_string();
             let avatar = profile["avatarUrl"].as_str().unwrap_or("").to_string();
             let vip_type = account["vipType"].as_i64().unwrap_or(0);
             let is_svip = vip_type >= 10;
             let is_vip = is_svip || vip_type > 0;
             LoginInfo {
-                logged_in: user_id.is_some(),
+                logged_in,
                 user_id,
                 nickname,
                 avatar,
@@ -532,18 +638,26 @@ pub async fn login_status(cookie: &str) -> LoginInfo {
                 has_cookie: Some(true),
             }
         }
-        Err(_) => LoginInfo {
-            logged_in: false,
-            user_id: None,
-            nickname: String::new(),
-            avatar: String::new(),
-            vip_type: 0,
-            vip_level: "none".into(),
-            is_vip: false,
-            is_svip: false,
-            vip_label: "无VIP".into(),
-            has_cookie: Some(true),
-        },
+        Err(e) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[netease-login] account info failed: {e}");
+            LoginInfo {
+                logged_in: has_music_u,
+                user_id: None,
+                nickname: if has_music_u {
+                    "网易云音乐用户".into()
+                } else {
+                    String::new()
+                },
+                avatar: String::new(),
+                vip_type: 0,
+                vip_level: "none".into(),
+                is_vip: false,
+                is_svip: false,
+                vip_label: "无VIP".into(),
+                has_cookie: Some(has_music_u),
+            }
+        }
     }
 }
 
@@ -652,6 +766,17 @@ pub async fn qr_check_with_cookies(
 
 /// Fetch user's playlists.
 pub async fn user_playlists(uid: &str, cookie: &str) -> Result<Value, String> {
+    let owned_uid;
+    let uid = if uid.is_empty() {
+        let info = login_status(cookie).await;
+        owned_uid = info.user_id.unwrap_or_default();
+        owned_uid.as_str()
+    } else {
+        uid
+    };
+    if uid.is_empty() {
+        return Ok(json!({ "loggedIn": false, "playlists": [] }));
+    }
     let body = json!({
         "uid": uid,
         "limit": 100,
@@ -683,10 +808,10 @@ pub async fn playlist_tracks(id: &str, cookie: &str) -> Result<Value, String> {
     let song_id: u64 = id.parse().map_err(|_| "Invalid playlist id")?;
     let body = json!({
         "id": song_id,
-        "n": 1000,
-        "s": 0,
+        "n": 100000,
+        "s": 8,
     });
-    let resp = weapi_post("v6/playlist/detail", &body, cookie).await?;
+    let resp = eapi_post("/api/v6/playlist/detail", &body, cookie).await?;
     let playlist = &resp["playlist"];
     let track_ids: Vec<u64> = playlist["trackIds"]
         .as_array()
@@ -703,9 +828,7 @@ pub async fn playlist_tracks(id: &str, cookie: &str) -> Result<Value, String> {
     // Fetch full track details in batches
     let mut all_tracks: Vec<Value> = Vec::new();
     for chunk in track_ids.chunks(500) {
-        let c = chunk.iter().map(|id| json!({"id": id})).collect::<Vec<_>>();
-        let detail_body = json!({ "c": c });
-        if let Ok(detail_resp) = weapi_post("v3/song/detail", &detail_body, cookie).await {
+        if let Ok(detail_resp) = song_detail(chunk, cookie).await {
             if let Some(songs) = detail_resp["songs"].as_array() {
                 for s in songs {
                     all_tracks.push(map_song_to_value(s));
@@ -740,7 +863,7 @@ fn map_song_to_value(s: &Value) -> Value {
 pub async fn like_check(ids: &[u64], uid: &str, cookie: &str) -> Result<Value, String> {
     // Use likelist endpoint
     let body = json!({ "uid": uid });
-    let resp = weapi_post("song/like/get", &body, cookie).await?;
+    let resp = eapi_post("/api/song/like/get", &body, cookie).await?;
     let liked_ids: std::collections::HashSet<u64> = resp["ids"]
         .as_array()
         .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
@@ -755,10 +878,14 @@ pub async fn like_check(ids: &[u64], uid: &str, cookie: &str) -> Result<Value, S
 
 /// Toggle like status for a song.
 pub async fn like_toggle(id: u64, like: bool, cookie: &str) -> Result<Value, String> {
+    let body = json!({ "trackIds": format!("[{id}]") });
+    let _ = eapi_post("/api/song/like/check", &body, cookie).await.ok();
     let body = json!({
+        "alg": "itembased",
         "trackId": id,
         "like": like,
+        "time": "3",
     });
-    let resp = weapi_post("song/like", &body, cookie).await?;
+    let resp = weapi_post("radio/like", &body, cookie).await?;
     Ok(json!({ "ok": resp["code"].as_i64() == Some(200) }))
 }

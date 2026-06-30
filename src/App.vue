@@ -5,12 +5,14 @@ import { useSettingsStore } from "./stores/settings";
 import { usePlayerStore } from "./stores/player";
 import { useQueueStore } from "./stores/queue";
 import { useSearchStore } from "./stores/search";
+import { useAccountStore } from "./stores/account";
 import { usePlayback } from "./composables/usePlayback";
 
 const settingsStore = useSettingsStore();
 const playerStore = usePlayerStore();
 const queueStore = useQueueStore();
 const searchStore = useSearchStore();
+const accountStore = useAccountStore();
 usePlayback();
 
 onMounted(async () => {
@@ -24,6 +26,7 @@ onMounted(async () => {
   playerStore.init();
   await queueStore.load();
   await searchStore.loadHistory();
+  await accountStore.refreshStatus();
 });
 </script>
 

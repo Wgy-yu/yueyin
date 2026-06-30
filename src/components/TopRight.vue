@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAccountStore } from "../stores/account";
 import LoginModal from "./LoginModal.vue";
@@ -7,6 +7,7 @@ import LoginModal from "./LoginModal.vue";
 const router = useRouter();
 const account = useAccountStore();
 const showLogin = ref(false);
+const current = computed(() => account.current());
 
 function goHome() {
   router.push("/");
@@ -37,14 +38,17 @@ onMounted(() => {
     <button
       class="flex h-11 items-center justify-center gap-2 rounded-[22px] border border-white/[0.08] bg-white/[0.035] px-4 text-[12px] tracking-wide text-white/55 backdrop-blur-xl transition-all hover:bg-white/[0.09] hover:text-white"
       @click="showLogin = true"
-      :title="account.current().loggedIn ? account.current().nickname : '登录账号'"
+      :title="current.loggedIn ? current.nickname || current.userId || '已登录' : '登录账号'"
     >
       <img
-        v-if="account.current().loggedIn && account.current().avatar"
-        :src="account.current().avatar"
+        v-if="current.loggedIn && current.avatar"
+        :src="current.avatar"
         class="h-7 w-7 rounded-full object-cover"
         alt=""
       />
+      <span v-else-if="current.loggedIn" class="max-w-24 truncate font-semibold">
+        {{ current.nickname || current.userId || '已登录' }}
+      </span>
       <span v-else class="font-semibold">登录</span>
     </button>
 

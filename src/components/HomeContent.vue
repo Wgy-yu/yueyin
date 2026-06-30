@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useAccountStore } from "../stores/account";
 import PlaylistPanel from "./PlaylistPanel.vue";
 
 const account = useAccountStore();
 const showPlaylist = ref(false);
 
-const cards = ref([
+const cards = computed(() => [
   {
     id: 1,
     label: "Library",
@@ -18,7 +18,7 @@ const cards = ref([
     id: 2,
     label: "Daily",
     title: "每日推荐",
-    sub: account.current().loggedIn ? "登录后同步你的今日歌曲" : "请先登录",
+    sub: account.current().loggedIn ? "正在整理你的今日歌曲" : "请先登录",
     tone: "mix",
   },
   {
