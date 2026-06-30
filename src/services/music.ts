@@ -158,3 +158,90 @@ export async function fetchLyrics(id: string, source: SourceType = "netease"): P
     return null;
   }
 }
+
+// ---------- Login ----------
+
+export interface LoginInfo {
+  loggedIn: boolean;
+  userId?: string;
+  nickname: string;
+  avatar: string;
+  vipType?: number;
+  vipLevel?: string;
+  isVip?: boolean;
+  isSvip?: boolean;
+  vipLabel?: string;
+}
+
+export async function getLoginStatus(source: SourceType = "netease"): Promise<LoginInfo> {
+  const cmd = source === "qq" ? "music_qq_login_status" : "music_login_status";
+  return invoke<LoginInfo>(cmd);
+}
+
+export async function loginWithCookie(cookie: string, source: SourceType = "netease"): Promise<LoginInfo> {
+  const cmd = source === "qq" ? "music_qq_login_cookie" : "music_login_cookie";
+  return invoke<LoginInfo>(cmd, { cookie });
+}
+
+export async function logout(source: SourceType = "netease"): Promise<void> {
+  const cmd = source === "qq" ? "music_qq_logout" : "music_logout";
+  await invoke(cmd);
+}
+
+export async function getQrKey(): Promise<string> {
+  const data = await invoke<{ key: string }>("music_qr_key");
+  return data.key;
+}
+
+export async function createQrCode(key: string): Promise<{ img: string; url: string }> {
+  return invoke<{ img: string; url: string }>("music_qr_create", { key });
+}
+
+export async function checkQrStatus(key: string): Promise<{ code: number; cookie?: string }> {
+  return invoke<{ code: number; cookie?: string }>("music_qr_check", { key });
+}
+
+// ---------- Playlists ----------
+
+export interface PlaylistInfo {
+  id: string;
+  name: string;
+  cover: string;
+  trackCount: number;
+  playCount: number;
+  creator: string;
+  subscribed: boolean;
+  specialType: number;
+  provider: string;
+}
+
+export async function getUserPlaylists(uid?: string, source: SourceType = "netease"): Promise<PlaylistInfo[]> {
+  const data = await invoke<{ playlists: PlaylistInfo[] }>("music_user_playlists", {
+    uid: uid ?? "",
+    source,
+  });
+  return data.playlists ?? [];
+}
+
+export async function getPlaylistTracks(id: string, source: SourceType = "netease"): Promise<{ playlist: PlaylistInfo; tracks: Track[] }> {
+  const data = await invoke<{ playlist: PlaylistInfo; tracks: RawSong[] }>("music_playlist_tracks", {
+    id,
+    source,
+  });
+  return {
+    playlist: data.playlist,
+    tracks: (data.tracks ?? []).map((s) => normalizeSong(s, source)),
+  };
+}
+
+// ---------- Favorites ----------
+
+export async function checkLiked(ids: string[]): Promise<Record<string, boolean>> {
+  const data = await invoke<{ liked: Record<string, boolean> }>("music_like_check", { ids });
+  return data.liked ?? {};
+}
+
+export async function toggleLike(id: string, like: boolean): Promise<boolean> {
+  const data = await invoke<{ ok: boolean }>("music_like_toggle", { id, like });
+  return data.ok;
+}

@@ -1,11 +1,20 @@
 <script setup lang="ts">
+import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { useAccountStore } from "../stores/account";
+import LoginModal from "./LoginModal.vue";
 
 const router = useRouter();
+const account = useAccountStore();
+const showLogin = ref(false);
 
 function goHome() {
   router.push("/");
 }
+
+onMounted(() => {
+  account.refreshStatus();
+});
 </script>
 
 <template>
@@ -30,9 +39,21 @@ function goHome() {
         <path d="M9.5 20v-5h5v5" />
       </svg>
     </button>
-    <button id="user-btn" class="icon-btn" title="登录账号">
-      <span class="login-word">登录</span>
+    <button
+      id="user-btn"
+      class="icon-btn"
+      @click="showLogin = true"
+      :title="account.current().loggedIn ? account.current().nickname : '登录账号'"
+    >
+      <img
+        v-if="account.current().loggedIn && account.current().avatar"
+        :src="account.current().avatar"
+        class="user-avatar"
+        alt=""
+      />
+      <span v-else class="login-word">登录</span>
     </button>
+    <LoginModal v-if="showLogin" @close="showLogin = false" />
   </div>
 </template>
 
@@ -63,6 +84,7 @@ function goHome() {
   transition: all 0.3s;
   font-family: inherit;
   padding: 0;
+  overflow: hidden;
 }
 
 .icon-btn:hover {
@@ -100,5 +122,12 @@ function goHome() {
 
 .login-word {
   font-weight: 600;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 </style>
