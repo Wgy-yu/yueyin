@@ -4,6 +4,7 @@ import type { SourceType } from "../types/track";
 import type { LoginInfo, PlaylistInfo } from "../services/music";
 import {
   getLoginStatus, loginWithCookie, logout as apiLogout,
+  openWebLogin as apiOpenWebLogin,
   getQrKey, createQrCode, checkQrStatus,
   getUserPlaylists, getPlaylistTracks,
 } from "../services/music";
@@ -42,6 +43,13 @@ export const useAccountStore = defineStore("account", () => {
     playlists.value = [];
   }
 
+  async function openWebLogin(source: SourceType = "netease") {
+    const info = await apiOpenWebLogin(source);
+    if (source === "qq") qq.value = info;
+    else netease.value = info;
+    return info;
+  }
+
   // QR login: get key + QR image
   async function startQrLogin(): Promise<{ key: string; img: string }> {
     const key = await getQrKey();
@@ -78,7 +86,7 @@ export const useAccountStore = defineStore("account", () => {
 
   return {
     netease, qq, playlists, playlistTracks, playlistLoading, activeSource,
-    current, refreshStatus, loginCookie, doLogout,
+    current, refreshStatus, loginCookie, doLogout, openWebLogin,
     startQrLogin, pollQr, fetchPlaylists, fetchPlaylistTracks,
   };
 });

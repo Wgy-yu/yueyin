@@ -6,6 +6,7 @@ use commands::{get_app_version, get_system_info, get_setting, set_setting, save_
 use commands::music::{
     music_search, music_song_url, music_lyric,
     music_login_status, music_login_cookie, music_logout,
+    music_open_web_login, music_cancel_web_login,
     music_qr_key, music_qr_create, music_qr_check,
     music_qq_login_status, music_qq_login_cookie, music_qq_logout,
     music_audio_proxy,
@@ -35,6 +36,7 @@ pub fn run() {
             save_queue, load_queue,
             music_search, music_song_url, music_lyric,
             music_login_status, music_login_cookie, music_logout,
+            music_open_web_login, music_cancel_web_login,
             music_qr_key, music_qr_create, music_qr_check,
             music_qq_login_status, music_qq_login_cookie, music_qq_logout,
             music_audio_proxy,

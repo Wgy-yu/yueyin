@@ -188,6 +188,14 @@ export async function logout(source: SourceType = "netease"): Promise<void> {
   await invoke(cmd);
 }
 
+export async function openWebLogin(source: SourceType = "netease"): Promise<LoginInfo> {
+  return invoke<LoginInfo>("music_open_web_login", { provider: source });
+}
+
+export async function cancelWebLogin(): Promise<void> {
+  await invoke("music_cancel_web_login");
+}
+
 export async function getQrKey(): Promise<string> {
   const data = await invoke<{ key: string }>("music_qr_key");
   return data.key;
