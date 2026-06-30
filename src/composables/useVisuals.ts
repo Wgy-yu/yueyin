@@ -21,9 +21,7 @@ export function useVisuals(getEngine: () => AudioEngine, container: HTMLElement)
     rafId = requestAnimationFrame(tick);
     if (!playing.value) return;
     const analysis = getEngine().getAnalysis();
-    // ponytail: simple beat proxy — bass spike above threshold
-    const beat = analysis.bass > 0.6 ? (analysis.bass - 0.6) * 2.5 : 0;
-    visual!.update(analysis, beat);
+    visual!.update(analysis, analysis.beat);
   };
   tick();
 

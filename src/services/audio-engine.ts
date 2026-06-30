@@ -5,6 +5,7 @@ export interface AudioAnalysis {
   mid: number;
   treble: number;
   energy: number;
+  beat: number; // 0-1, spike on beat onset
 }
 
 export class AudioEngine {
@@ -19,6 +20,10 @@ export class AudioEngine {
   private smoothBass = 0;
   private smoothMid = 0;
   private smoothTreble = 0;
+  private energyHistory = new Float32Array(43); // ~1 sec at 43fps
+  private energyIdx = 0;
+  private energyFull = false;
+  private prevBeat = 0;
 
   private ensureAudio(): HTMLAudioElement {
     if (!this.audio) {
@@ -64,7 +69,7 @@ export class AudioEngine {
   get paused(): boolean { return this.audio?.paused ?? true; }
 
   getAnalysis(): AudioAnalysis {
-    if (!this.analyser || !this.freqData) return { bass: 0, mid: 0, treble: 0, energy: 0 };
+    if (!this.analyser || !this.freqData) return { bass: 0, mid: 0, treble: 0, energy: 0, beat: 0 };
     // ponytail: TS strict Uint8Array generic mismatch with Web Audio API typings
     this.analyser.getByteFrequencyData(this.freqData as any);
     const d = this.freqData;
@@ -84,7 +89,18 @@ export class AudioEngine {
     this.smoothMid += (mid - this.smoothMid) * (mid > this.smoothMid ? attack : release);
     this.smoothTreble += (treble - this.smoothTreble) * (treble > this.smoothTreble ? attack : release);
     const energy = total / d.length;
-    return { bass: this.smoothBass, mid: this.smoothMid, treble: this.smoothTreble, energy };
+    // Beat detection: energy spike above running average
+    this.energyHistory[this.energyIdx] = energy;
+    this.energyIdx = (this.energyIdx + 1) % this.energyHistory.length;
+    if (this.energyIdx === 0) this.energyFull = true;
+    const histLen = this.energyFull ? this.energyHistory.length : this.energyIdx;
+    let avgEnergy = 0;
+    for (let i = 0; i < histLen; i++) avgEnergy += this.energyHistory[i];
+    avgEnergy /= Math.max(1, histLen);
+    const beatRaw = energy > avgEnergy * 1.4 ? Math.min(1, (energy - avgEnergy) * 4) : 0;
+    // Decay beat value
+    this.prevBeat = Math.max(beatRaw, this.prevBeat * 0.85);
+    return { bass: this.smoothBass, mid: this.smoothMid, treble: this.smoothTreble, energy, beat: this.prevBeat };
   }
 
   async load(url: string) {
