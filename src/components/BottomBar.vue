@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { bindButtonAnimations, unbindButtonAnimations } from "../utils/animations";
 
+const barRef = ref<HTMLElement | null>(null);
 const isPlaying = ref(false);
 const isLiked = ref(false);
 const currentTime = ref(0);
@@ -8,6 +10,13 @@ const duration = ref(0);
 const progress = computed(() =>
   duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0
 );
+
+onMounted(() => {
+  if (barRef.value) bindButtonAnimations(barRef.value);
+});
+onUnmounted(() => {
+  if (barRef.value) unbindButtonAnimations(barRef.value);
+});
 
 function togglePlay() {
   isPlaying.value = !isPlaying.value;
@@ -25,7 +34,7 @@ function formatTime(seconds: number): string {
 </script>
 
 <template>
-  <div id="bottom-bar" class="visible">
+  <div id="bottom-bar" ref="barRef" class="visible">
     <div id="progress-bar">
       <div id="progress-fill" :style="{ width: progress + '%' }"></div>
       <div
@@ -330,8 +339,8 @@ function formatTime(seconds: number): string {
   border-radius: 11px;
   color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  transition: color 0.18s, transform 0.18s, text-shadow 0.18s, background 0.18s,
-    box-shadow 0.18s;
+  /* ponytail: transform/box-shadow handled by GSAP; keep color/background only */
+  transition: color 0.18s, background 0.18s;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -347,13 +356,7 @@ function formatTime(seconds: number): string {
 .ctrl-btn:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.045);
-  transform: translateY(-1px);
   text-shadow: 0 0 10px rgba(0, 245, 212, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
-}
-
-.ctrl-btn:active {
-  transform: translateY(0) scale(0.96);
 }
 
 .ctrl-btn.liked {
@@ -368,8 +371,8 @@ function formatTime(seconds: number): string {
   border-radius: 50%;
   color: rgba(255, 255, 255, 0.96);
   background: rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s,
-    box-shadow 0.2s, filter 0.2s;
+  /* ponytail: transform handled by GSAP */
+  transition: background 0.2s, box-shadow 0.2s;
   box-shadow: inset 0 0 2px 1px rgba(255, 255, 255, 0.34),
     inset 0 0 10px 4px rgba(255, 255, 255, 0.13),
     0 10px 30px rgba(0, 0, 0, 0.18);
@@ -384,14 +387,12 @@ function formatTime(seconds: number): string {
 
 #play-btn:hover {
   background: rgba(255, 255, 255, 0.055);
-  transform: translateY(-1px) scale(1.012);
   box-shadow: inset 0 0 2px 1px rgba(255, 255, 255, 0.42),
     inset 0 0 12px 5px rgba(255, 255, 255, 0.17),
     0 12px 34px rgba(0, 0, 0, 0.22), 0 0 18px rgba(0, 245, 212, 0.1);
 }
 
 #play-btn:active {
-  transform: translateY(0) scale(0.965);
   box-shadow: inset 0 0 2px 1px rgba(255, 255, 255, 0.28),
     inset 0 0 10px 4px rgba(255, 255, 255, 0.1),
     0 8px 22px rgba(0, 0, 0, 0.2);
