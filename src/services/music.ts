@@ -70,3 +70,17 @@ export function proxiedAudioUrl(url: string): string {
   if (!url) return "";
   return `${API_BASE}/audio?url=${encodeURIComponent(url)}`;
 }
+
+export async function fetchLyrics(id: string, source: SourceType = "netease"): Promise<string | null> {
+  const endpoint = source === "qq" ? "/qq/lyric" : "/lyric";
+  const param = source === "qq" ? "mid" : "id";
+  try {
+    const data = await api<{ lrc?: { lyric?: string }; yrc?: { lyric?: string }; lyric?: string }>(
+      endpoint,
+      { [param]: id }
+    );
+    return data.yrc?.lyric ?? data.lrc?.lyric ?? data.lyric ?? null;
+  } catch {
+    return null;
+  }
+}

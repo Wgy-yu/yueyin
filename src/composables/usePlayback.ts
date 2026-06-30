@@ -4,12 +4,14 @@ import { AudioEngine } from "../services/audio-engine";
 import { getSongUrl, proxiedAudioUrl } from "../services/music";
 import { usePlayerStore } from "../stores/player";
 import { useQueueStore } from "../stores/queue";
+import { useLyricsStore } from "../stores/lyrics";
 
 let engine: AudioEngine | null = null;
 
 export function usePlayback() {
   const player = usePlayerStore();
   const queue = useQueueStore();
+  const lyrics = useLyricsStore();
   const { playing, volume, currentTrack: playerTrack } = storeToRefs(player);
 
   function getEngine() {
@@ -36,6 +38,7 @@ export function usePlayback() {
     playerTrack.value = track;
     player.currentTime = 0;
     player.duration = 0;
+    lyrics.load(track); // fire-and-forget
 
     const url = await getSongUrl(track.id, track.source);
     if (!url) { console.warn("无法获取播放地址:", track.name); return; }

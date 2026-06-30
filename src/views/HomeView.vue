@@ -7,6 +7,7 @@ import SearchArea from "../components/SearchArea.vue";
 import TopRight from "../components/TopRight.vue";
 import HomeContent from "../components/HomeContent.vue";
 import BottomBar from "../components/BottomBar.vue";
+import LyricsPanel from "../components/LyricsPanel.vue";
 
 const showSplash = ref(true);
 const appVersion = ref("0.1.0");
@@ -74,6 +75,9 @@ onMounted(async () => {
 
     <!-- Home Content -->
     <HomeContent />
+
+    <!-- Lyrics Panel -->
+    <LyricsPanel />
 
     <!-- Bottom Bar -->
     <BottomBar />
