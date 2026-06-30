@@ -1,12 +1,24 @@
 export type AudioEvent = "timeupdate" | "statechange" | "ended" | "loadedmetadata";
 
+export interface AudioAnalysis {
+  bass: number;
+  mid: number;
+  treble: number;
+  energy: number;
+}
+
 export class AudioEngine {
   private audio: HTMLAudioElement | null = null;
   private ctx: AudioContext | null = null;
   private source: MediaElementAudioSourceNode | null = null;
   private gain: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private freqData: Uint8Array | null = null;
   private listeners = new Map<AudioEvent, Set<() => void>>();
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
+  private smoothBass = 0;
+  private smoothMid = 0;
+  private smoothTreble = 0;
 
   private ensureAudio(): HTMLAudioElement {
     if (!this.audio) {
@@ -26,8 +38,12 @@ export class AudioEngine {
     const audio = this.ensureAudio();
     this.ctx = new AudioContext();
     this.source = this.ctx.createMediaElementSource(audio);
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.analyser.smoothingTimeConstant = 0.58;
+    this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
     this.gain = this.ctx.createGain();
-    this.source.connect(this.gain).connect(this.ctx.destination);
+    this.source.connect(this.analyser).connect(this.gain).connect(this.ctx.destination);
   }
 
   on(event: AudioEvent, fn: () => void) {
@@ -46,6 +62,30 @@ export class AudioEngine {
   get currentTime(): number { return this.audio?.currentTime ?? 0; }
   get duration(): number { return this.audio?.duration ?? 0; }
   get paused(): boolean { return this.audio?.paused ?? true; }
+
+  getAnalysis(): AudioAnalysis {
+    if (!this.analyser || !this.freqData) return { bass: 0, mid: 0, treble: 0, energy: 0 };
+    // ponytail: TS strict Uint8Array generic mismatch with Web Audio API typings
+    this.analyser.getByteFrequencyData(this.freqData as any);
+    const d = this.freqData;
+    // Bin ranges matching Mineradio: kick 0-7, vocal 7-140, mid 140-280, treble 280+
+    let bass = 0, mid = 0, treble = 0, total = 0;
+    for (let i = 0; i < d.length; i++) {
+      const v = d[i] / 255;
+      total += v;
+      if (i < 8) bass += v;
+      else if (i < 140) mid += v;
+      else treble += v;
+    }
+    bass /= 8; mid /= 133; treble /= (d.length - 140);
+    // Asymmetric smoothing: fast attack, slow release
+    const attack = 0.3, release = 0.08;
+    this.smoothBass += (bass - this.smoothBass) * (bass > this.smoothBass ? attack : release);
+    this.smoothMid += (mid - this.smoothMid) * (mid > this.smoothMid ? attack : release);
+    this.smoothTreble += (treble - this.smoothTreble) * (treble > this.smoothTreble ? attack : release);
+    const energy = total / d.length;
+    return { bass: this.smoothBass, mid: this.smoothMid, treble: this.smoothTreble, energy };
+  }
 
   async load(url: string) {
     const audio = this.ensureAudio();

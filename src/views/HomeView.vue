@@ -8,14 +8,34 @@ import TopRight from "../components/TopRight.vue";
 import HomeContent from "../components/HomeContent.vue";
 import BottomBar from "../components/BottomBar.vue";
 import LyricsPanel from "../components/LyricsPanel.vue";
+import { getAudioEngine } from "../composables/usePlayback";
+import { useVisuals } from "../composables/useVisuals";
 
 const showSplash = ref(true);
 const appVersion = ref("0.1.0");
 const isMaximized = ref(false);
 const isFullscreen = ref(false);
+const canvasContainerRef = ref<HTMLElement | null>(null);
 
 function handleSplashEnter() {
   showSplash.value = false;
+  // Mount visual engine after splash exits
+  if (canvasContainerRef.value) {
+    const engine = getAudioEngine();
+    if (engine) {
+      useVisuals(() => engine, canvasContainerRef.value!);
+    } else {
+      // ponytail: engine not yet created, defer until first play
+      const interval = setInterval(() => {
+        const eng = getAudioEngine();
+        if (eng && canvasContainerRef.value) {
+          clearInterval(interval);
+          useVisuals(() => eng, canvasContainerRef.value!);
+        }
+      }, 500);
+      setTimeout(() => clearInterval(interval), 10000);
+    }
+  }
 }
 
 onMounted(async () => {
@@ -59,7 +79,7 @@ onMounted(async () => {
     </div>
 
     <!-- Canvas container for visuals -->
-    <div id="canvas-container"></div>
+    <div id="canvas-container" ref="canvasContainerRef"></div>
 
     <!-- Splash Screen -->
     <SplashScreen v-if="showSplash" @enter="handleSplashEnter" />

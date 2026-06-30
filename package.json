@@ -12,8 +12,10 @@
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
+    "@types/three": "^0.185.0",
     "gsap": "^3.15.0",
     "pinia": "^2.2.0",
+    "three": "^0.185.0",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0"
   },

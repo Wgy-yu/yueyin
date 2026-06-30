@@ -8,6 +8,8 @@ import { useLyricsStore } from "../stores/lyrics";
 
 let engine: AudioEngine | null = null;
 
+export function getAudioEngine(): AudioEngine | null { return engine; }
+
 export function usePlayback() {
   const player = usePlayerStore();
   const queue = useQueueStore();
